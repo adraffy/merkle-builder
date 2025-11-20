@@ -1,24 +1,30 @@
-import { keccak } from "@adraffy/keccak";
+import { keccak256 } from "./utils.js";
 
 type LeafNode = { path: Uint8Array; value: Uint8Array };
 type ExtensionNode = { path: Uint8Array; child: Node };
-type BranchNode = { children: MaybeNode[]; value: Uint8Array | undefined };
+type BranchNode = { children: MaybeNode[] };
+
 export type Node = LeafNode | ExtensionNode | BranchNode;
 export type MaybeNode = Node | undefined;
 
-export function H(v: Uint8Array): Uint8Array {
-	return keccak().update(v).bytes;
-}
+const RLP_NULL = encodeRlpBytes(new Uint8Array(0)); // 0x80
+const RLP_EMPTY = encodeRlpList([encodeRlpList([])]); // 0xc1c0
+const HASH_NULL = keccak256(RLP_NULL);
 
-const RLP_NULL = encodeRlpBytes(new Uint8Array(0)); // Uint8Array.of(0x80);
-const HASH_NULL = H(RLP_NULL);
-
-function isBranch(node: Node): node is BranchNode {
+export function isBranch(node: Node): node is BranchNode {
 	return "children" in node;
 }
 
-function isExtension(node: Node): node is ExtensionNode {
+export function isExtension(node: Node): node is ExtensionNode {
 	return "child" in node;
+}
+
+export function isLeaf(node: Node): node is LeafNode {
+	return "value" in node;
+}
+
+export function isEmptyLeaf(node: Node) {
+	return isLeaf(node) && !node.path.length && !node.value.length;
 }
 
 function common(a: Uint8Array, b: Uint8Array): number {
@@ -32,58 +38,74 @@ export function insertNode(
 	path: Uint8Array,
 	value: Uint8Array
 ): Node {
+	if (value[0] === 0)
+		throw new Error(
+			`expected trimmed: ${Buffer.from(value).toString("hex")}`
+		);
 	if (!node) {
 		return { path, value };
 	} else if (isBranch(node)) {
-		if (path.length) {
-			const i = path[0];
-			const children = node.children.slice();
-			children[i] = insertNode(children[i], path.subarray(1), value);
-			return { children, value: node.value };
-		} else {
+		if (!path.length) {
 			return { children: node.children, value };
 		}
-	} else {
+		const i = path[0];
+		const children = node.children.slice();
+		const child = insertNode(children[i], path.subarray(1), value);
+		children[i] = child;
+		return { children };
+	} else if (isExtension(node)) {
 		const other = node.path;
 		const i = common(other, path);
 		if (i === other.length) {
-			if (isExtension(node)) {
-				return {
-					path: other,
-					child: insertNode(node.child, path.subarray(i), value),
-				};
-			} else if (i === path.length) {
-				return { path, value }; // replace
-			}
+			return {
+				path: other,
+				child: insertNode(node.child, path.subarray(i), value),
+			};
 		}
-		const b: BranchNode = {
-			children: Array(16).fill(undefined),
-			value: undefined,
-		};
+		const b = newBranch();
 		if (i < other.length) {
-			b.children[other[i]] = { ...node, path: other.subarray(i + 1) };
+			const rest = other.subarray(i + 1);
+			b.children[other[i]] = rest.length
+				? { path: rest, child: node.child }
+				: node.child;
+		}
+		b.children[path[i]] = { path: path.subarray(i + 1), value };
+		return i ? { path: path.subarray(0, i), child: b } : b;
+	} else {
+		const other = node.path;
+		const i = common(other, path);
+		if (i === other.length && i === path.length) {
+			return { path, value }; // replace
+		}
+		const b = newBranch();
+		if (i < other.length) {
+			b.children[other[i]] = {
+				path: other.subarray(i + 1),
+				value: node.value,
+			};
 		}
 		if (i < path.length) {
 			b.children[path[i]] = { path: path.subarray(i + 1), value };
 		} else {
-			b.value = value;
+			throw new Error("bug");
 		}
 		return i ? { path: path.subarray(0, i), child: b } : b;
 	}
 }
 
-export function encodeRlpNode(node: MaybeNode): Uint8Array {
+function newBranch(): BranchNode {
+	return { children: Array(16).fill(undefined) };
+}
+
+export function encodeNode(node: MaybeNode): Uint8Array {
 	if (!node) {
 		return RLP_NULL;
 	} else if (isBranch(node)) {
-		return encodeRlpList([
-			...node.children.map(x => x ? encodeRlpBytes(encodeNodeHash(x)) : RLP_NULL),
-			node.value ? encodeRlpBytes(encodeRlpBytes(node.value)) : RLP_NULL,
-		]);
+		return encodeRlpList([...node.children.map(encodeNodeRef), RLP_NULL]);
 	} else if (isExtension(node)) {
 		return encodeRlpList([
 			encodeRlpBytes(encodePath(node.path, false)),
-			encodeRlpBytes(encodeNodeHash(node.child)),
+			encodeNodeRef(node.child),
 		]);
 	} else {
 		return encodeRlpList([
@@ -93,10 +115,21 @@ export function encodeRlpNode(node: MaybeNode): Uint8Array {
 	}
 }
 
-export function encodeNodeHash(node: MaybeNode): Uint8Array {
+function encodeNodeRef(node: MaybeNode) {
+	if (!node) {
+		return RLP_NULL;
+	} else if (isEmptyLeaf(node)) {
+		return RLP_EMPTY;
+	} else {
+		const v = encodeNode(node);
+		return encodeRlpBytes(v.length < 32 ? v : keccak256(v));
+	}
+}
+
+export function getRootHash(node: MaybeNode): Uint8Array {
 	if (!node) return HASH_NULL;
-	const v = encodeRlpNode(node);
-	return v.length < 32 ? v : H(v);
+	const v = encodeNode(node);
+	return v.length < 32 ? v : keccak256(v);
 }
 
 export function toNibblePath(v: Uint8Array) {
@@ -109,7 +142,7 @@ export function toNibblePath(v: Uint8Array) {
 	return u;
 }
 
-export function encodePath(path: Uint8Array, leaf: boolean): Uint8Array {
+function encodePath(path: Uint8Array, leaf: boolean): Uint8Array {
 	const v = new Uint8Array(1 + (path.length >> 1));
 	if (leaf) v[0] = 32;
 	const odd = path.length & 1;
