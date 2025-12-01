@@ -9,7 +9,7 @@ import { ethGetProof } from "./rpc.js";
 describe("registrar", () => {
 	let F: Foundry;
 	beforeAll(async () => {
-		F = await Foundry.launch({ infoLog: true });
+		F = await Foundry.launch({ infoLog: false }); // enable to show events
 	});
 	afterAll(() => F?.shutdown());
 
@@ -36,7 +36,7 @@ describe("registrar", () => {
 			);
 		}
 
-		const { storageHash } = await ethGetProof(F, C.target);
+		const { storageHash } = await ethGetProof(F.provider, C.target);
 
 		expect(toHex(getRootHash(node))).toStrictEqual(storageHash);
 	});

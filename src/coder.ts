@@ -27,8 +27,8 @@ export class Coder {
 		this.buf = v;
 	}
 	require(need: number) {
-		if (need && this.pos + need >= this.buf.length) {
-			throw new Error("eof");
+		if (need && this.pos + need > this.buf.length) {
+			throw new Error(`eof: ${this.pos + need} > ${this.buf.length}`);
 		}
 	}
 	readByte() {

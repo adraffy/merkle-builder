@@ -1,4 +1,3 @@
-import type { Foundry } from "@adraffy/blocksmith";
 import { toHex } from "../src/utils.js";
 
 export type EthStorageProof = {
@@ -7,19 +6,17 @@ export type EthStorageProof = {
 	proof: string[];
 };
 export type EthGetProof = {
+	address: string;
 	storageHash: string;
 	storageProof: EthStorageProof[];
 };
 
 // partial eth_getProof helper
 export async function ethGetProof(
-	foundry: Foundry,
+	provider: { send(address: string, params: any[]): Promise<any> },
 	address: string,
-	slots: Uint8Array[] = []
+	slots: Uint8Array[] = [],
+	blockTag = "latest"
 ): Promise<EthGetProof> {
-	return foundry.provider.send("eth_getProof", [
-		address,
-		slots.map(toHex),
-		"latest",
-	]);
+	return provider.send("eth_getProof", [address, slots.map(toHex), blockTag]);
 }

@@ -2,7 +2,7 @@ import { keccak256, toHex } from "./utils.js";
 
 type LeafNode = { path: Uint8Array; value: Uint8Array };
 type ExtensionNode = { path: Uint8Array; child: Node };
-type BranchNode = { children: MaybeNode[], cache?: Uint8Array };
+type BranchNode = { children: MaybeNode[]; cache?: Uint8Array };
 
 export type Node = LeafNode | ExtensionNode | BranchNode;
 export type MaybeNode = Node | undefined;
@@ -39,6 +39,13 @@ function common(a: Uint8Array, b: Uint8Array): number {
 	return i;
 }
 
+function startsWith(path: Uint8Array, prefix: Uint8Array): number {
+	const n = prefix.length;
+	if (path.length < n) return 0;
+	for (let i = 0; i < n; ++i) if (path[i] !== prefix[i]) return 0;
+	return n;
+}
+
 export function findLeaf(
 	node: MaybeNode,
 	path: Uint8Array
@@ -49,11 +56,11 @@ export function findLeaf(
 			return findLeaf(node.children[path[0]], path.subarray(1));
 		}
 	} else if (isExtension(node)) {
-		const n = node.path.length;
-		if (path.length >= n && !Buffer.compare(node.path, path.subarray(0, n))) {
-			return findLeaf(node.child, path.subarray(n));
+		const i = startsWith(path, node.path);
+		if (i) {
+			return findLeaf(node.child, path.subarray(i));
 		}
-	} else if (!Buffer.compare(node.path, path)) {
+	} else if (startsWith(path, node.path)) {
 		return node;
 	}
 }
@@ -65,12 +72,12 @@ export function getProof(node: MaybeNode, path: Uint8Array): Uint8Array[] {
 		if (isBranch(node)) {
 			if (!path.length) break;
 			node = node.children[path[0]];
-			path = path.subarray(1)
+			path = path.subarray(1);
 		} else if (isExtension(node)) {
-			const n = node.path.length;
-			if (path.length < n || Buffer.compare(node.path, path.subarray(0, n))) break;
+			const i = startsWith(path, node.path);
+			if (!i) break;
 			node = node.child;
-			path = path.subarray(n);
+			path = path.subarray(i);
 		} else {
 			break;
 		}
@@ -123,6 +130,45 @@ export function insertNode(
 	}
 }
 
+export function deleteNode(node: MaybeNode, path: Uint8Array): MaybeNode {
+	if (!node || !path.length) return;
+	if (isBranch(node)) {
+		const i = path[0];
+		if (!node.children[i]) return node; // unchanged
+		const children = node.children.slice();
+		let child = (children[i] = deleteNode(children[i], path.subarray(1)));
+		if (child) return { children }; // same structure
+		let index = -1;
+		for (let j = 0; j < children.length; ++j) {
+			if (children[j]) {
+				if (index >= 0) return { children }; // multiple children
+				index = j; // remember child
+			}
+		}
+		// collapse single child
+		child = children[index] as Node;
+		if (isBranch(child)) return { path: Uint8Array.of(index), child }; // extension
+		path = Uint8Array.of(index, ...child.path);
+		return isExtension(child)
+			? { path, child: child.child } // double extension
+			: newLeaf(path, child.value);
+	} else if (isExtension(node)) {
+		const i = common(node.path, path);
+		if (!i) return node; // unchanged
+		if (i === path.length) return; // delete
+		const child = deleteNode(node.child, path.subarray(i));
+		if (!child) return; // deleted
+		if (isBranch(child)) return { path: node.path, child }; // same structure
+		path = Buffer.concat([node.path, child.path]);
+		return isExtension(child)
+			? { path, child: child.child } // double extension
+			: newLeaf(path, child.value);
+	} else {
+		if (common(node.path, path) === path.length) return; // delete
+		return node; // unchanged
+	}
+}
+
 function newLeaf(path: Uint8Array, value: Uint8Array): LeafNode {
 	if (!value.length) {
 		value = EMPTY_BYTES;
@@ -141,7 +187,10 @@ export function encodeNode(node: MaybeNode): Uint8Array {
 	if (!node) {
 		return RLP_NULL;
 	} else if (isBranch(node)) {
-		return node.cache ??= encodeRlpList([...node.children.map(encodeNodeRef), RLP_NULL]);
+		return (node.cache ??= encodeRlpList([
+			...node.children.map(encodeNodeRef),
+			RLP_NULL,
+		]));
 	} else if (isExtension(node)) {
 		return encodeRlpList([
 			encodeRlpBytes(encodePath(node.path, false)),

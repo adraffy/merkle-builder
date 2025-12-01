@@ -15,7 +15,7 @@ describe("proofs", () => {
 	test("dne", async () => {
 		const C = await F.deploy(`contract X {}`);
 		const slot = toBytes(0, 32);
-		const { storageProof } = await ethGetProof(F, C.target, [slot]);
+		const { storageProof } = await ethGetProof(F.provider, C.target, [slot]);
 		const proof = getProof(undefined, toNibblePath(keccak256(slot))).map(toHex);
 		expect(proof).toStrictEqual(storageProof[0].proof);
 	});
@@ -25,7 +25,7 @@ describe("proofs", () => {
 			uint256 slot0 = 0;
 		}`);
 		const slot = toBytes(0, 32);
-		const { storageProof } = await ethGetProof(F, C.target, [slot]);
+		const { storageProof } = await ethGetProof(F.provider, C.target, [slot]);
 		const path = toNibblePath(keccak256(slot));
 		const node = insertNode(undefined, path, toBytes(0));
 		const proof = getProof(node, path).map(toHex);
@@ -43,7 +43,7 @@ describe("proofs", () => {
 				}
 			}`);
 			const { storageProof } = await ethGetProof(
-				F,
+				F.provider,
 				C.target,
 				storage.map(([k]) => k)
 			);

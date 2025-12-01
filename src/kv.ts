@@ -1,4 +1,5 @@
 import {
+	deleteNode,
 	EMPTY_BYTES,
 	findLeaf,
 	insertNode,
@@ -7,17 +8,19 @@ import {
 } from "./trie.js";
 import { toBigInt, toBytes, keccak256, trimLeadingZeros } from "./utils.js";
 
+export type InsertMode = "zero" | "delete" | undefined;
+
 export function insertBytes(
 	node: MaybeNode,
 	slot: Uint8Array,
 	value: Uint8Array,
-	zero = true
+	mode: InsertMode = "delete"
 ) {
 	if (slot.length !== 32) throw new Error(`expected bytes32 slot`);
 	const key = keccak256(slot);
 	const path = toNibblePath(key);
 	let oldSize = 0;
-	if (zero) {
+	if (mode) {
 		const prior = findLeaf(node, path)?.value;
 		if (prior?.length) {
 			const header = toBigInt(prior);
@@ -30,9 +33,13 @@ export function insertBytes(
 	}
 	let pos = 0;
 	if (value.length < 32) {
-		const word = bytes32(value);
-		word[31] = value.length << 1;
-		node = insertNode(node, path, trimLeadingZeros(word));
+		if (!value.length && mode == "delete") {
+			node = deleteNode(node, path);
+		} else {
+			const word = bytes32(value);
+			word[31] = value.length << 1;
+			node = insertNode(node, path, trimLeadingZeros(word));
+		}
 	} else {
 		node = insertNode(node, path, toBytes((BigInt(value.length) << 1n) | 1n));
 		for (; pos < value.length; inc(key)) {
@@ -49,9 +56,14 @@ export function insertBytes(
 			pos = end;
 		}
 	}
-	// solidity ALWAYS zeros the storage
-	for (; pos < oldSize; inc(key), pos += 32) {
-		node = insertNode(node, toNibblePath(keccak256(key)), EMPTY_BYTES);
+	if (mode === "delete") {
+		for (; pos < oldSize; inc(key), pos += 32) {
+			node = deleteNode(node, toNibblePath(keccak256(key)));
+		}
+	} else if (mode === "zero") {
+		for (; pos < oldSize; inc(key), pos += 32) {
+			node = insertNode(node, toNibblePath(keccak256(key)), EMPTY_BYTES);
+		}
 	}
 	return node;
 }

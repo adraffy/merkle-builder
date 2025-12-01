@@ -23,7 +23,8 @@ export function toBytes(x: string | number | bigint, w?: number): Uint8Array {
 		x = x ? x.toString(16) : "";
 	}
 	w ??= (x.length + 1) >> 1;
-	return Buffer.from(x.padStart(w << 1, "0"), "hex");
+	w <<= 1;
+	return Buffer.from(x.padStart(w, "0").slice(-w), "hex");
 }
 
 export function toBigInt(v: Uint8Array): bigint {
