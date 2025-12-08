@@ -1,5 +1,5 @@
 {
-	"block0": 144476747,
+	"block0": 144815220,
 	"names": [
 		[
 			"0x69420f05A11f617B4B74fFe2E04B2D300dFA556F",
@@ -284,6 +284,34 @@
 		[
 			"0x2Bad924208E881557E6Fb5511644a24299Fb4F76",
 			"jokipauci"
+		],
+		[
+			"0x86D7933192B1fAccb62dB1e893dfe25D1e2104A7",
+			"sancash.eth"
+		],
+		[
+			"0xA2554e747078e6B4e64c34F82aCde4d0A261f31C",
+			"jainfromhill.eth"
+		],
+		[
+			"0x7cAc6e244149e87A8C8a8356C4478983EcE55EAa",
+			"Crazyfox.eth"
+		],
+		[
+			"0x85694D14354Dcc60469e5933f2450bf20B4a111C",
+			"facewear.eth"
+		],
+		[
+			"0x3917FbAdBc6015CF6Ebb39efcDf3a8CCf3A231e3",
+			"koyzile.eth"
+		],
+		[
+			"0xb2cA1CAecd1D3e9bF84B9332cb4aB11961639a5c",
+			"kokyat"
+		],
+		[
+			"0x846E7BD2F74dD5e9859e62aEc8dCC8e68aDb90A0",
+			"walletconnectpay.eth"
 		]
 	]
 }
