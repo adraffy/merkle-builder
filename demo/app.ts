@@ -4,6 +4,7 @@ import {
 	Interface,
 	isError,
 	JsonRpcProvider,
+	WebSocketProvider,
 } from "ethers";
 import { readFileSync, writeFileSync } from "node:fs";
 import {
@@ -19,8 +20,6 @@ import { insertBytes } from "../src/kv.js";
 import { followSlot, keccak256, toBytes, toHex } from "../src/utils.js";
 import { ethGetProof, type EthGetProof } from "../test/rpc.js";
 import { parseArgs } from "node:util";
-import { WebSocketProvider } from "ethers";
-import { Coder } from "../src/coder.js";
 
 const REGISTRAR = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const REGISTRAR_ABI = new Interface([
