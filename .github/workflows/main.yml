@@ -6,6 +6,7 @@ on:
 
 jobs:
   test:
+    name: 'bun test'
     runs-on: ubuntu-latest
 
     steps:
@@ -15,7 +16,6 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-          cache: true
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1

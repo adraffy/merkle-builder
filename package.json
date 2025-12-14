@@ -1,15 +1,17 @@
 {
 	"name": "merkle-builder",
+	"description": "Low-level Merkle-Patricia storage trie implementation",
+	"version": "0.0.1",
 	"type": "module",
-	"main": "dist/index.js",
-	"module": "dist/index.mjs",
+	"main": "dist/index.cjs",
+	"module": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"files": [
 		"./dist"
 	],
 	"exports": {
 		".": {
-			"import": "./dist/index.mjs",
+			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
 		}
 	},
