@@ -4,3 +4,5 @@ junk/
 out/
 cache/
 .env
+dist/
+

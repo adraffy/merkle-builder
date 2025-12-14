@@ -31,6 +31,11 @@ describe("trie", () => {
 
 	describe("deleteNode", () => {
 		test("delete leaf by prefix", () => {
+			//     []     ==>   null
+			//     /
+			//    0*
+			//   / \
+			// [0] [1]
 			let a = undefined;
 			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			expect(isLeaf(a)).toBeTrue();
@@ -38,6 +43,11 @@ describe("trie", () => {
 		});
 
 		test("delete branch by prefix", () => {
+			//      []    ==>   [11]
+			//     /  \
+			//    0*   1
+			//   / \    \
+			// [0] [1]   [1]
 			let a = undefined;
 			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));
@@ -50,6 +60,11 @@ describe("trie", () => {
 		});
 
 		test("collapse branch", () => {
+			//      []     ==>    (1)
+			//     /  \           /  \
+			//    0*   1        [0]  [1]
+			//   /    / \
+			// [0]  [0] [1]
 			let a = undefined;
 			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			a = insertNode(a, Uint8Array.of(1, 0), Uint8Array.of(1));
@@ -63,6 +78,11 @@ describe("trie", () => {
 		});
 
 		test("delete extension by prefix", () => {
+			//      []     ==>   null
+			//     /
+			//   (0)*
+			//   / \
+			// [0] [1]
 			let a = undefined;
 			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));
@@ -71,6 +91,11 @@ describe("trie", () => {
 		});
 
 		test("collapse extension", () => {
+			//      []     ==>   (01)
+			//     /
+			//   (0)
+			//   /  \
+			// [0]* [1]
 			let a = undefined;
 			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));

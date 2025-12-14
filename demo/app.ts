@@ -7,8 +7,8 @@ import {
 	WebSocketProvider,
 } from "ethers";
 import { readFileSync, writeFileSync } from "node:fs";
+import { parseArgs } from "node:util";
 import {
-	EMPTY_BYTES,
 	findLeaf,
 	getProof,
 	getRootHash,
@@ -18,8 +18,7 @@ import {
 } from "../src/trie.js";
 import { insertBytes } from "../src/kv.js";
 import { followSlot, keccak256, toBytes, toHex } from "../src/utils.js";
-import { ethGetProof, type EthGetProof } from "../test/rpc.js";
-import { parseArgs } from "node:util";
+import { ethGetProof, ethGetStorage, type EthGetProof } from "../test/rpc.js";
 
 const REGISTRAR = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const REGISTRAR_ABI = new Interface([
@@ -167,24 +166,57 @@ Bun.serve({
 			if (!Number.isSafeInteger(id)) {
 				throw new Error("expected id");
 			}
-			if (json.method !== "eth_getProof") {
-				throw new Error("expected eth_getProof");
-			}
 			if (!Array.isArray(json.params) || json.params.length !== 3) {
 				throw new Error("expected params");
 			}
-			const [address, hexSlots, blockTag] = json.params;
+			if (json.params[2] !== "latest") {
+				throw new Error(`unsupported blockTag: ${json.params[2]}`);
+			}
 			if (
-				REGISTRAR.localeCompare(address, undefined, { sensitivity: "base" })
+				REGISTRAR.localeCompare(json.params[0], undefined, {
+					sensitivity: "base",
+				})
 			) {
 				throw new Error(`expected ${REGISTRAR}`);
 			}
-			if (!Array.isArray(hexSlots)) {
-				throw new Error(`expected slots`);
-			}
-			slots = hexSlots.map((x) => toBytes(x, 32));
-			if (blockTag !== "latest") {
-				throw new Error("expected latest blockTag");
+			switch (json.method) {
+				case "eth_getProof": {
+					const hexSlots = json.params[1];
+					if (!Array.isArray(hexSlots)) throw new Error(`expected slots`);
+					console.time("getRootHash");
+					const storageHash = toHex(getRootHash(node));
+					console.timeEnd("getRootHash");
+					console.time("getProof");
+					const storageProof = hexSlots.map((hexSlot) => {
+						const slot = toBytes(hexSlot, 32);
+						const path = toNibblePath(keccak256(slot));
+						const leaf = findLeaf(node, path);
+						return {
+							key: toHex(slot),
+							value: leaf?.value.length ? toHex(leaf.value) : "0x0",
+							proof: getProof(node, path).map((v) => toHex(v)),
+						};
+					});
+					console.timeEnd("getProof");
+					const result = {
+						address: REGISTRAR.toLowerCase() as typeof REGISTRAR,
+						storageHash,
+						storageProof,
+					} satisfies EthGetProof;
+					return Response.json({ id, result });
+				}
+				case "eth_getStorageAt": {
+					const slot = toBytes(json.params[1], 32);
+					const path = toNibblePath(keccak256(slot));
+					console.time("getStorage");
+					const leaf = findLeaf(node, path);
+					console.timeEnd("getStorage");
+					const word = new Uint8Array(32);
+					if (leaf) word.set(leaf.value, 32 - leaf.value.length);
+					return Response.json({ id, result: toHex(word) });
+				}
+				default:
+					throw new Error(`unsupported method: ${json.method}`);
 			}
 		} catch (err: any) {
 			return Response.json({
@@ -192,25 +224,6 @@ Bun.serve({
 				error: err?.message ?? String(err),
 			});
 		}
-		console.time("getRootHash");
-		const storageHash = toHex(getRootHash(node));
-		console.timeEnd("getRootHash");
-		console.time("getProof");
-		const storageProof = slots.map((slot) => {
-			const path = toNibblePath(keccak256(slot));
-			return {
-				key: toHex(slot),
-				value: toHex(findLeaf(node, path)?.value ?? EMPTY_BYTES),
-				proof: getProof(node, path).map((v) => toHex(v)),
-			};
-		});
-		console.timeEnd("getProof");
-		const result = {
-			address: REGISTRAR.toLowerCase(),
-			storageHash,
-			storageProof,
-		} satisfies EthGetProof;
-		return Response.json({ id, result });
 	},
 });
 
@@ -224,7 +237,14 @@ const slots = [getPrimarySlot("0x69420f05A11f617B4B74fFe2E04B2D300dFA556F")];
 const realProof = await ethGetProof(realProvider, REGISTRAR, slots);
 const fakeProof = await ethGetProof(fakeProvider, REGISTRAR, slots);
 
+const realStorage = await ethGetStorage(realProvider, REGISTRAR, slots[0]);
+const fakeStorage = await ethGetStorage(fakeProvider, REGISTRAR, slots[0]);
+
 console.log("eth_getProof Match:", extract(realProof) === extract(fakeProof));
+console.log(
+	"eth_getStorageAt Match:",
+	JSON.stringify(realStorage) === JSON.stringify(fakeStorage)
+);
 console.log(`Ready on ${SERVE_PORT}`);
 
 function extract({ storageHash, storageProof }: EthGetProof) {
