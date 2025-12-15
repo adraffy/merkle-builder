@@ -255,7 +255,7 @@ async function sync() {
 	console.time("sync");
 	const p = new JsonRpcProvider(chainInfo.publicRPC, chainInfo.id, {
 		staticNetwork: true,
-		batchMaxCount: 3,
+		batchMaxCount: 1,
 	});
 	let calls = 0;
 	p.on("debug", (x) => {

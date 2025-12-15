@@ -17,9 +17,9 @@ describe("coder", () => {
 		const coder = new Coder();
 		for (let i = 0; i <= MAX_LENGTH; ++i) {
 			coder.pos = 0;
-			coder.writeLength(i);
+			coder.writeSize(i);
 			coder.pos = 0;
-			expect(coder.readLength()).toStrictEqual(i);
+			expect(coder.readSize()).toStrictEqual(i);
 		}
 	});
 });

@@ -1,6 +1,7 @@
 import {
 	EMPTY_BYTES,
 	EMPTY_LEAF,
+	encodeNode,
 	isBranch,
 	isEmptyLeaf,
 	isExtension,
@@ -13,12 +14,13 @@ const TY_BRANCH = 1;
 const TY_EXTENSION = 2;
 const TY_EMPTY_LEAF = 3;
 const TY_LEAF = 4;
+const TY_BRANCH_WITH_CACHE = 5;
 
 export const MAX_LENGTH = (1 << 22) - 1; // 4194304
 
 export class Coder {
 	public pos = 0;
-	constructor(public buf: Uint8Array = new Uint8Array(1024)) {}
+	constructor(public buf: Uint8Array<ArrayBuffer> = new Uint8Array(1024)) {}
 	expand(need: number) {
 		const required = this.pos + need;
 		let size = this.buf.length;
@@ -41,30 +43,30 @@ export class Coder {
 		this.expand(1);
 		this.buf[this.pos++] = x;
 	}
-	readLength() {
-		let i = this.readByte();
-		if (i & 128) {
+	readSize() {
+		let size = this.readByte();
+		if (size & 128) {
 			const next = this.readByte();
-			i = (i & 127) + ((next & 127) << 7);
+			size = (size & 127) + ((next & 127) << 7);
 			if (next & 128) {
-				i += this.readByte() << 14;
+				size += this.readByte() << 14;
 			}
 		}
-		return i;
+		return size;
 	}
-	writeLength(i: number) {
-		if (i < 128) {
-			this.writeByte(i);
+	writeSize(size: number) {
+		if (size < 128) {
+			this.writeByte(size);
 		} else {
-			this.writeByte(i | 128);
-			i >>= 7;
-			if (i < 128) {
-				this.writeByte(i);
+			this.writeByte(size | 128);
+			size >>= 7;
+			if (size < 128) {
+				this.writeByte(size);
 			} else {
-				this.writeByte(i | 128);
-				i >>= 7;
-				if (i >> 8) throw new RangeError("overflow");
-				this.writeByte(i);
+				this.writeByte(size | 128);
+				size >>= 7;
+				if (size >> 8) throw new RangeError("overflow");
+				this.writeByte(size);
 			}
 		}
 	}
@@ -78,6 +80,13 @@ export class Coder {
 		this.buf.set(v, this.pos);
 		this.pos += v.length;
 	}
+	readSizedBytes(): Uint8Array {
+		return this.readBytes(this.readSize());
+	}
+	writeSizedBytes(v: Uint8Array) {
+		this.writeSize(v.length);
+		this.writeBytes(v);
+	}
 	readPath() {
 		const n = this.readByte();
 		return toNibblePath(this.readBytes((n + 1) >> 1)).subarray(0, n);
@@ -90,11 +99,19 @@ export class Coder {
 			this.buf[this.pos++] = (v[i] << 4) | (v[i + 1] ?? 0);
 		}
 	}
+	readChildren(): MaybeNode[] {
+		return Array.from({ length: 16 }, () => this.readNode());
+	}
 	readNode(): MaybeNode {
 		const ty = this.readByte();
 		switch (ty) {
 			case TY_NULL:
 				return;
+			case TY_BRANCH_WITH_CACHE:
+				return {
+					children: this.readChildren(),
+					cache: this.readSizedBytes(),
+				};
 			case TY_BRANCH:
 				return {
 					children: Array.from({ length: 16 }, () => this.readNode()),
@@ -110,20 +127,27 @@ export class Coder {
 			case TY_LEAF:
 				return {
 					path: this.readPath(),
-					value: this.readBytes(this.readLength()),
+					value: this.readSizedBytes(),
 				};
 			default:
 				throw new Error(`unknown type: ${ty}`);
 		}
 	}
-	writeNode(node: MaybeNode) {
+	writeNode(node: MaybeNode, includeCache?: boolean) {
 		if (!node) {
 			this.writeByte(TY_NULL);
 		} else if (isBranch(node)) {
-			this.writeByte(TY_BRANCH);
+			const cache =
+				includeCache === undefined
+					? node.cache
+					: includeCache
+					? encodeNode(node)
+					: undefined;
+			this.writeByte(cache ? TY_BRANCH_WITH_CACHE : TY_BRANCH);
 			for (const x of node.children) {
 				this.writeNode(x);
 			}
+			if (cache) this.writeSizedBytes(cache);
 		} else if (isExtension(node)) {
 			this.writeByte(TY_EXTENSION);
 			this.writePath(node.path);
@@ -133,8 +157,7 @@ export class Coder {
 		} else {
 			this.writeByte(TY_LEAF);
 			this.writePath(node.path);
-			this.writeLength(node.value.length);
-			this.writeBytes(node.value);
+			this.writeSizedBytes(node.value);
 		}
 	}
 	get bytes() {
