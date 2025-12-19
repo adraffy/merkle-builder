@@ -1,6 +1,6 @@
 import { type Hex, toHex } from "../src/utils.js";
 
-interface Provider {
+export interface RawProvider {
 	send(method: string, params: any[]): Promise<any>;
 }
 
@@ -17,7 +17,7 @@ export type EthGetProof = {
 
 // partial eth_getProof helper
 export async function ethGetProof(
-	provider: Provider,
+	provider: RawProvider,
 	address: string,
 	slots: Uint8Array[] = [],
 	blockTag = "latest"
@@ -26,7 +26,7 @@ export async function ethGetProof(
 }
 
 export async function ethGetStorage(
-	provider: Provider,
+	provider: RawProvider,
 	address: string,
 	slot: Uint8Array,
 	blockTag = "latest"

@@ -5,7 +5,18 @@
 * Memory efficient (copy-on-write, shared subexpressions)
 * Compute efficient (branch nodes hash once)
 
-### 
+#### Roadmap
+
+* Linea
+    * ☑︎ [`MIMC`](./src/mimc.ts)
+    * ☐ [`SparseMerkleProof`](https://github.com/Consensys/linea-ens/blob/main/packages/linea-state-verifier/contracts/lib/SparseMerkleProof.sol)
+    * ☐ [`linea_getProof`](https://docs.linea.build/api/reference/linea-getproof)
+* ZKSync
+    * ☐ `Blake2S`
+    * ☐ `ZKSyncSMT`
+    * ☐ [`zks_getProof`](https://docs.zksync.io/zksync-protocol/api/zks-rpc)
+
+---
 
 ### Setup
 
@@ -23,6 +34,8 @@
 Replicate `eth_getProof` for [`L2ReverseRegistrar`](https://github.com/ensdomains/ens-contracts/blob/staging/contracts/reverseRegistrar/L2ReverseRegistrar.sol) (requires [`.env`](./.env.sample) for provider)
 
 * `bun demo/app.ts -c op` &rarr; [Optimism](https://optimistic.etherscan.io/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
-    * ✅️ `80` names as of `2025-12-17`
+    * ✅️ `81` names as of `2025-12-18`
 * `bun demo/app.ts -c base` &rarr; [Base](https://basescan.org/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
-    * ✅️ `1016660` names as of `2025-12-17`
+    * ✅️ `1083628` names as of `2025-12-18`
+* `bun demo/app.ts -c arb` &rarr; [Arbitrum](https://arbiscan.io/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
+    * ✅️ `136` names as of `2025-12-18`

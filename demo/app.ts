@@ -4,9 +4,7 @@ import {
 	Interface,
 	isError,
 	JsonRpcProvider,
-	WebSocketProvider,
 } from "ethers";
-import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import {
 	findLeaf,
@@ -18,15 +16,19 @@ import {
 } from "../src/trie.js";
 import { insertBytes } from "../src/kv.js";
 import { followSlot, keccak256, toBytes, toHex } from "../src/utils.js";
-import { ethGetProof, ethGetStorage, type EthGetProof } from "../test/rpc.js";
+import {
+	ethGetProof,
+	ethGetStorage,
+	type EthGetProof,
+	type RawProvider,
+} from "../test/rpc.js";
+import { Database } from "bun:sqlite";
 
 const REGISTRAR = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const REGISTRAR_ABI = new Interface([
 	`function owner() view returns (address)`,
 	`event NameForAddrChanged(address indexed addr, string name)`,
 ]);
-const SERVE_PORT = 8000;
-const LOG_STEP = 10000;
 
 const args = parseArgs({
 	args: process.argv.slice(2),
@@ -42,22 +44,35 @@ const args = parseArgs({
 type ChainInfo = {
 	name: string;
 	id: bigint;
-	ownable: boolean;
+	ownable?: boolean;
 	publicRPC: string;
 	drpcSlug?: string;
 	alchemySlug?: string;
 	explorer: string;
 	createdAtBlock: number;
+	logStep?: number;
+	testnet?: boolean;
 };
 
 function determineChain(name = "op"): ChainInfo {
 	switch (name.toLowerCase()) {
 		case undefined: // default
+		case "arb": {
+			return {
+				name: "arbitrum",
+				id: 42161n,
+				publicRPC: "https://arb1.arbitrum.io/rpc",
+				drpcSlug: "arbitrum",
+				alchemySlug: "arb-mainnet",
+				explorer: "https://arbiscan.io",
+				createdAtBlock: 349263357,
+				logStep: 100000, // 250ms blocks
+			};
+		}
 		case "op":
 			return {
 				name: "optimism",
 				id: 10n,
-				ownable: false,
 				explorer: "https://optimistic.etherscan.io",
 				publicRPC: "https://mainnet.optimism.io",
 				drpcSlug: "optimism",
@@ -81,11 +96,12 @@ function determineChain(name = "op"): ChainInfo {
 }
 
 function determineProvider(info: ChainInfo) {
+	const proto = "https";
 	let key: string | undefined;
 	if (info.drpcSlug && (key = process.env.DRPC_KEY)) {
-		return `wss://lb.drpc.live/${info.drpcSlug}/${key}`;
+		return `${proto}://lb.drpc.live/${info.drpcSlug}/${key}`;
 	} else if (info.alchemySlug && (key = process.env.ALCHEMY_KEY)) {
-		return `wss://${info.alchemySlug}.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`;
+		return `${proto}://${info.alchemySlug}.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`;
 	} else {
 		throw new Error(`missing .env`);
 	}
@@ -94,158 +110,164 @@ function determineProvider(info: ChainInfo) {
 const chainInfo = determineChain(args.values.chain);
 const realProviderURL = determineProvider(chainInfo);
 
-const cacheFile = new URL(`./${chainInfo.name}.json`, import.meta.url);
-
 console.log(`Chain: ${chainInfo.name.toUpperCase()} (${chainInfo.id})`);
 console.log(`Contract: ${chainInfo.explorer}/address/${REGISTRAR}`);
 console.log(`Public RPC: ${chainInfo.publicRPC}`);
 console.log(`Prover RPC: ${realProviderURL}`);
 
+const db = new Database(`${import.meta.dir}/${chainInfo.name}.sqlite`);
+db.run(`CREATE TABLE IF NOT EXISTS state (
+	key STRING PRIMARY KEY, 
+	value STRING
+)`);
+db.run(`CREATE TABLE IF NOT EXISTS names (
+	block INTEGER,
+	addr BLOB,
+	name BLOB
+)`);
+
+const insertName = db.prepare<unknown, [number, Uint8Array, Uint8Array]>(
+	"INSERT INTO names (block,addr,name) VALUES(?,?,?)"
+);
+const updateState = db.prepare<unknown, [string, string]>(
+	"REPLACE INTO state (key,value) VALUES(?,?)"
+);
+
 let node: MaybeNode = undefined;
 let block0 = chainInfo.createdAtBlock;
-const names: [number, string, string][] = [];
-try {
-	const json = JSON.parse(readFileSync(cacheFile, "utf8")) as {
-		block0: number;
-		names: typeof names;
-	};
-	console.log(`Names: ${json.names.length}`);
-	console.time("buildTrie");
-	block0 = json.block0;
-	for (const [block, addr, name] of json.names) {
-		register(block, addr, name, false);
+
+if (1) {
+	const state = Object.fromEntries(
+		db
+			.query<{ key: string; value: string }, []>("SELECT * FROM state")
+			.all()
+			.map((x) => [x.key, x.value])
+	);
+	if (state.block0) {
+		block0 = Math.max(block0, parseInt(state.block0));
 	}
-	console.timeEnd("buildTrie");
-} catch {}
-
-function getPrimarySlot(addr: string) {
-	return followSlot(0n, toBytes(addr, 32));
-}
-
-function register(block: number, addr: string, name: string, log = true) {
-	node = insertBytes(node, getPrimarySlot(addr), Buffer.from(name));
-	names.push([block, addr, name]);
-	if (log) console.log(`[${block}] ${addr} = ${name}`);
+	console.log(`Blocks: [${chainInfo.createdAtBlock}, ${block0})`);
+	printNamesCount();
+	console.time("rebuildTrie");
+	for (const row of db
+		.query<
+			{
+				block: number;
+				addr: Uint8Array;
+				name: Uint8Array;
+			},
+			[]
+		>("SELECT * FROM names ORDER BY rowid")
+		.iterate()) {
+		if (row.block >= block0) break;
+		node = insertBytes(node, getPrimarySlot(toHex(row.addr)), row.name);
+	}
+	console.timeEnd("rebuildTrie");
 }
 
 process.once("SIGINT", () => {
 	console.log("\nStopping...");
-	save();
+	db.close();
 	process.exit();
 });
 
 await sync();
 
-const realProvider = new WebSocketProvider(realProviderURL, chainInfo.id, {
+const realProvider = new JsonRpcProvider(realProviderURL, chainInfo.id, {
 	staticNetwork: true,
 	batchMaxCount: 1,
 });
 
 const registrar = new Contract(REGISTRAR, REGISTRAR_ABI, realProvider);
-registrar.on("NameForAddrChanged", register);
+
+const blockTag = `0x${(block0 - 1).toString(16)}`;
 
 if (chainInfo.ownable) {
+	const owner = await registrar.owner({ blockTag });
+	console.log(`Owner: ${owner}`);
 	node = insertNode(
 		node,
 		toNibblePath(keccak256(toBytes(1, 32))),
-		toBytes(await registrar.owner())
+		toBytes(owner)
 	);
 }
 
-Bun.serve({
-	port: SERVE_PORT,
-	async fetch(req) {
-		let id = 1;
-		let slots: Uint8Array[];
-		try {
-			const json: any = await req.json();
-			if (typeof json !== "object") {
-				throw new Error("expected object");
-			}
-			id = json.id;
-			if (!Number.isSafeInteger(id)) {
-				throw new Error("expected id");
-			}
-			if (!Array.isArray(json.params) || json.params.length !== 3) {
-				throw new Error("expected params");
-			}
-			if (json.params[2] !== "latest") {
-				throw new Error(`unsupported blockTag: ${json.params[2]}`);
-			}
-			if (
-				REGISTRAR.localeCompare(json.params[0], undefined, {
-					sensitivity: "base",
-				})
-			) {
-				throw new Error(`expected ${REGISTRAR}`);
-			}
-			switch (json.method) {
-				case "eth_getProof": {
-					const hexSlots = json.params[1];
-					if (!Array.isArray(hexSlots)) throw new Error(`expected slots`);
-					console.time("getRootHash");
-					const storageHash = toHex(getRootHash(node));
-					console.timeEnd("getRootHash");
-					console.time("getProof");
-					const storageProof = hexSlots.map((hexSlot) => {
-						const slot = toBytes(hexSlot, 32);
-						const path = toNibblePath(keccak256(slot));
-						const leaf = findLeaf(node, path);
-						return {
-							key: toHex(slot),
-							value: leaf?.value.length ? toHex(leaf.value) : "0x0",
-							proof: getProof(node, path).map((v) => toHex(v)),
-						};
-					});
-					console.timeEnd("getProof");
-					const result = {
-						address: REGISTRAR.toLowerCase() as typeof REGISTRAR,
-						storageHash,
-						storageProof,
-					} satisfies EthGetProof;
-					return Response.json({ id, result });
-				}
-				case "eth_getStorageAt": {
-					const slot = toBytes(json.params[1], 32);
+console.time("getRootHash");
+const storageHash = toHex(getRootHash(node));
+console.timeEnd("getRootHash");
+console.log(`StorageHash: ${storageHash}`);
+
+const fakeProvider: RawProvider = {
+	async send(method, params) {
+		switch (method) {
+			case "eth_getProof": {
+				const hexSlots = params[1];
+				if (!Array.isArray(hexSlots)) throw new Error(`expected slots`);
+				console.time("getProof");
+				const storageProof = hexSlots.map((hexSlot) => {
+					const slot = toBytes(hexSlot, 32);
 					const path = toNibblePath(keccak256(slot));
-					console.time("getStorage");
 					const leaf = findLeaf(node, path);
-					console.timeEnd("getStorage");
-					const word = new Uint8Array(32);
-					if (leaf) word.set(leaf.value, 32 - leaf.value.length);
-					return Response.json({ id, result: toHex(word) });
-				}
-				default:
-					throw new Error(`unsupported method: ${json.method}`);
+					return {
+						key: toHex(slot),
+						value: leaf?.value.length ? toHex(leaf.value) : "0x0",
+						proof: getProof(node, path).map((v) => toHex(v)),
+					};
+				});
+				console.timeEnd("getProof");
+				return {
+					address: REGISTRAR.toLowerCase() as typeof REGISTRAR,
+					storageHash,
+					storageProof,
+				} satisfies EthGetProof;
 			}
-		} catch (err: any) {
-			return Response.json({
-				id,
-				error: err?.message ?? String(err),
-			});
+			case "eth_getStorageAt": {
+				const slot = toBytes(params[1], 32);
+				const path = toNibblePath(keccak256(slot));
+				console.time("getStorage");
+				const leaf = findLeaf(node, path);
+				console.timeEnd("getStorage");
+				const word = new Uint8Array(32);
+				if (leaf) word.set(leaf.value, 32 - leaf.value.length);
+				return toHex(word);
+			}
+			default: {
+				throw new Error(`unsupported method: ${method}`);
+			}
 		}
 	},
-});
+};
 
-const fakeProvider = new JsonRpcProvider(`http://localhost:${SERVE_PORT}`, 1, {
-	staticNetwork: true,
-	batchMaxCount: 1,
-});
+const slots = [
+	getPrimarySlot("0x69420f05A11f617B4B74fFe2E04B2D300dFA556F"), // tate
+	getPrimarySlot("0x51050ec063d393217B436747617aD1C2285Aeeee"), // raffy
+	getPrimarySlot("0x000000000000000000000000000000000000beef"), // dne
+];
 
-const slots = [getPrimarySlot("0x69420f05A11f617B4B74fFe2E04B2D300dFA556F")];
+const realProof = await ethGetProof(realProvider, REGISTRAR, slots, blockTag);
+const fakeProof = await ethGetProof(fakeProvider, REGISTRAR, slots, blockTag);
 
-const realProof = await ethGetProof(realProvider, REGISTRAR, slots);
-const fakeProof = await ethGetProof(fakeProvider, REGISTRAR, slots);
-
-const realStorage = await ethGetStorage(realProvider, REGISTRAR, slots[0]);
-const fakeStorage = await ethGetStorage(fakeProvider, REGISTRAR, slots[0]);
+const realStorage = await ethGetStorage(
+	realProvider,
+	REGISTRAR,
+	slots[0],
+	blockTag
+);
+const fakeStorage = await ethGetStorage(
+	fakeProvider,
+	REGISTRAR,
+	slots[0],
+	blockTag
+);
 
 console.log("eth_getProof Match:", extract(realProof) === extract(fakeProof));
 console.log(
 	"eth_getStorageAt Match:",
 	JSON.stringify(realStorage) === JSON.stringify(fakeStorage)
 );
-console.log(`Ready on ${SERVE_PORT}`);
+
+db.close();
+process.exit(0);
 
 function extract({ storageHash, storageProof }: EthGetProof) {
 	return JSON.stringify({ storageHash, storageProof });
@@ -262,45 +284,45 @@ async function sync() {
 		if (x.action === "sendRpcPayload") calls++;
 	});
 	const registrar = new Contract(REGISTRAR, REGISTRAR_ABI, p);
-	let lastSavedBlock = block0;
 	while (true) {
 		const t0 = Date.now();
 		let block1 = await p.getBlockNumber();
 		while (block0 < block1) {
-			const { logs, lastBlock } = await getLogs(
+			const { logs, lastBlock, status } = await getLogs(
 				registrar,
 				block0,
-				Math.min(block1, block0 + LOG_STEP - 1)
+				Math.min(block1, block0 + (chainInfo.logStep ?? 10000) - 1)
 			);
-			for (const log of logs) {
-				register(log.blockNumber, log.args.addr, log.args.name);
-			}
-			block0 = lastBlock + 1;
-			if (logs.length) {
-				save();
-				lastSavedBlock = block0;
-			}
+			db.transaction(() => {
+				for (const log of logs) {
+					const { addr, name } = log.args;
+					const nameBuf = Buffer.from(name);
+					node = insertBytes(node, getPrimarySlot(addr), nameBuf);
+					console.log(`[${log.blockNumber}] ${addr} = ${name}`);
+					insertName.run(log.blockNumber, toBytes(addr, 20), nameBuf);
+				}
+				if (logs.length > 20) {
+					console.log(status); // repeat message
+				}
+				block0 = lastBlock + 1;
+				updateState.run("block0", String(block0));
+			})();
 		}
 		if (Date.now() - t0 < 1000) break;
 	}
-	if (lastSavedBlock != block0) {
-		save();
-	}
 	console.log(`Calls: ${calls}`);
 	console.timeEnd("sync");
+	printNamesCount();
 }
 
-async function getLogs(
-	registrar: Contract,
-	block0: number,
-	block1: number
-): Promise<{ logs: EventLog[]; lastBlock: number }> {
+async function getLogs(registrar: Contract, block0: number, block1: number) {
 	const event = registrar.filters.NameForAddrChanged();
 	while (true) {
 		const count = 1 + block1 - block0;
 		try {
 			const logs = await registrar.queryFilter(event, block0, block1);
-			console.log(`getLogs: ${block0}-${block1} (${count}) = ${logs.length}`);
+			const status = `getLogs: [${block0}, ${block1}] (${count}) = ${logs.length}`;
+			console.log(status);
 			if (logs.length > 100) {
 				const lastBlock = logs[logs.length - 1].blockNumber;
 				if (logs[0].blockNumber !== lastBlock) {
@@ -309,7 +331,7 @@ async function getLogs(
 					logs.splice(i + 1, logs.length - i);
 				}
 			}
-			return { logs: logs as EventLog[], lastBlock: block1 };
+			return { logs: logs as EventLog[], lastBlock: block1, status };
 		} catch (err: unknown) {
 			if (isError(err, "UNKNOWN_ERROR")) {
 				const match = err.message.match(
@@ -321,9 +343,9 @@ async function getLogs(
 					continue;
 				}
 			} else if (count > 1) {
-				const half = count >> 1;
-				console.log(`getLogs: ${count} => ${half} (retry)`);
-				block1 = block0 + half - 1;
+				const less = Math.ceil(count / 5);
+				console.log(`getLogs: ${count} => ${less} (retry)`);
+				block1 = block0 + less - 1;
 				continue;
 			}
 			throw err;
@@ -331,7 +353,12 @@ async function getLogs(
 	}
 }
 
-function save() {
-	writeFileSync(cacheFile, JSON.stringify({ block0, names }, undefined, "\t"));
-	console.log(`Saved: ${names.length}`);
+function printNamesCount() {
+	console.log(
+		`Names: ${db.query("SELECT count(block) FROM names").values()[0][0]}`
+	);
+}
+
+function getPrimarySlot(addr: string) {
+	return followSlot(0n, toBytes(addr, 32));
 }
