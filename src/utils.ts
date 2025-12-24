@@ -46,6 +46,9 @@ export function toBigInt(v: Uint8Array): bigint {
 		0n
 	);
 }
+// export function toBigInt(v: Uint8Array): bigint {
+// 	return v.length ? BigInt(toHex(v)) : 0n;
+// }
 
 export function toHex(v: Uint8Array): Hex {
 	return `0x${hex_from_bytes(v)}`;

@@ -34,8 +34,8 @@
 Replicate `eth_getProof` for [`L2ReverseRegistrar`](https://github.com/ensdomains/ens-contracts/blob/staging/contracts/reverseRegistrar/L2ReverseRegistrar.sol) (requires [`.env`](./.env.sample) for provider)
 
 * `bun demo/app.ts -c op` &rarr; [Optimism](https://optimistic.etherscan.io/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
-    * ✅️ `81` names as of `2025-12-18`
+    * ✅️ `82` names as of `2025-12-23`
 * `bun demo/app.ts -c base` &rarr; [Base](https://basescan.org/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
-    * ✅️ `1083628` names as of `2025-12-18`
+    * ✅️ `1259226` names as of `2025-12-23`
 * `bun demo/app.ts -c arb` &rarr; [Arbitrum](https://arbiscan.io/address/0x0000000000D8e504002cC26E3Ec46D81971C1664)
-    * ✅️ `136` names as of `2025-12-18`
+    * ✅️ `137` names as of `2025-12-23`

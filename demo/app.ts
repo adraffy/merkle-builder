@@ -44,7 +44,7 @@ type ChainInfo = {
 	name: string;
 	id: bigint;
 	ownable?: boolean;
-	publicRPC: string;
+	publicRPC?: string;
 	drpcSlug?: string;
 	alchemySlug?: string;
 	explorer: string;
@@ -60,12 +60,12 @@ function determineChain(name = "op"): ChainInfo {
 			return {
 				name: "arbitrum",
 				id: 42161n,
-				publicRPC: "https://arb1.arbitrum.io/rpc",
+				//publicRPC: "https://arb1.arbitrum.io/rpc",
 				drpcSlug: "arbitrum",
 				alchemySlug: "arb-mainnet",
 				explorer: "https://arbiscan.io",
 				createdAtBlock: 349263357,
-				logStep: 100000, // 250ms blocks
+				logStep: 50000, // 250ms blocks
 			};
 		}
 		case "op":
@@ -110,12 +110,12 @@ const chainInfo = determineChain(args.values.chain);
 const registarAddress = chainInfo.testnet // https://docs.ens.domains/ensip/19/#annex-supported-chains
 	? "0x00000BeEF055f7934784D6d81b6BC86665630dbA"
 	: "0x0000000000D8e504002cC26E3Ec46D81971C1664"
-const realProviderURL = determineProvider(chainInfo);
+const realRPC = determineProvider(chainInfo);
 
 console.log(`Chain: ${chainInfo.name.toUpperCase()} (${chainInfo.id})`);
 console.log(`Contract: ${chainInfo.explorer}/address/${registarAddress}`);
 console.log(`Public RPC: ${chainInfo.publicRPC}`);
-console.log(`Prover RPC: ${realProviderURL}`);
+console.log(`Prover RPC: ${realRPC}`);
 
 const db = new Database(`${import.meta.dir}/${chainInfo.name}.sqlite`);
 db.run(`CREATE TABLE IF NOT EXISTS state (
@@ -175,7 +175,7 @@ process.once("SIGINT", () => {
 
 await sync();
 
-const realProvider = new JsonRpcProvider(realProviderURL, chainInfo.id, {
+const realProvider = new JsonRpcProvider(realRPC, chainInfo.id, {
 	staticNetwork: true,
 	batchMaxCount: 1,
 });
@@ -284,7 +284,7 @@ function extract({ storageHash, storageProof }: EthGetProof) {
 
 async function sync() {
 	console.time("sync");
-	const p = new JsonRpcProvider(chainInfo.publicRPC, chainInfo.id, {
+	const p = new JsonRpcProvider(chainInfo.publicRPC ?? realRPC, chainInfo.id, {
 		staticNetwork: true,
 		batchMaxCount: 1,
 	});
