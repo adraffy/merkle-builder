@@ -1,3 +1,5 @@
+import { parseArgs } from "node:util";
+import { Database } from "bun:sqlite";
 import {
 	Contract,
 	EventLog,
@@ -5,24 +7,23 @@ import {
 	isError,
 	JsonRpcProvider,
 } from "ethers";
-import { parseArgs } from "node:util";
 import {
 	findLeaf,
 	getProof,
 	getRootHash,
-	insertNode,
+	insertLeaf,
 	toNibblePath,
 	type MaybeNode,
 } from "../src/trie.js";
 import { insertBytes } from "../src/kv.js";
-import { followSlot, keccak256, toBytes, toHex } from "../src/utils.js";
+import { keccak256, toBytes, toHex } from "../src/utils.js";
 import {
 	ethGetProof,
 	ethGetStorage,
 	type EthGetProof,
 	type RawProvider,
 } from "../test/rpc.js";
-import { Database } from "bun:sqlite";
+import { getPrimarySlot, setOwner } from "./registrar.js";
 
 const REGISTRAR_ABI = new Interface([
 	`function owner() view returns (address)`,
@@ -109,7 +110,7 @@ function determineProvider(info: ChainInfo) {
 const chainInfo = determineChain(args.values.chain);
 const registarAddress = chainInfo.testnet // https://docs.ens.domains/ensip/19/#annex-supported-chains
 	? "0x00000BeEF055f7934784D6d81b6BC86665630dbA"
-	: "0x0000000000D8e504002cC26E3Ec46D81971C1664"
+	: "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const realRPC = determineProvider(chainInfo);
 
 console.log(`Chain: ${chainInfo.name.toUpperCase()} (${chainInfo.id})`);
@@ -154,14 +155,12 @@ if (1) {
 	for (const row of db
 		.query<
 			{
-				block: number;
 				addr: Uint8Array;
 				name: Uint8Array;
 			},
-			[]
-		>("SELECT * FROM names ORDER BY rowid")
-		.iterate()) {
-		if (row.block >= block0) break;
+			[number]
+		>("SELECT * FROM names ORDER BY rowid WHERE block < ?")
+		.iterate(block0)) {
 		node = insertBytes(node, getPrimarySlot(toHex(row.addr)), row.name);
 	}
 	console.timeEnd("rebuildTrie");
@@ -187,11 +186,7 @@ const blockTag = `0x${(block0 - 1).toString(16)}`;
 if (chainInfo.ownable) {
 	const owner = await registrar.owner({ blockTag });
 	console.log(`Owner: ${owner}`);
-	node = insertNode(
-		node,
-		toNibblePath(keccak256(toBytes(1, 32))),
-		toBytes(owner)
-	);
+	node = setOwner(node, owner);
 }
 
 console.time("getRootHash");
@@ -366,8 +361,4 @@ function printNamesCount() {
 	console.log(
 		`Names: ${db.query("SELECT count(block) FROM names").values()[0][0]}`
 	);
-}
-
-function getPrimarySlot(addr: string) {
-	return followSlot(0n, toBytes(addr, 32));
 }

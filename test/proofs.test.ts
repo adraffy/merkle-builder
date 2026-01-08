@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Foundry } from "@adraffy/blocksmith";
-import { getProof, insertNode, toNibblePath } from "../src/trie.js";
+import { getProof, insertLeaf, toNibblePath } from "../src/trie.js";
 import { keccak256, toBigInt, toBytes, toHex } from "../src/utils.js";
 import { ethGetProof } from "./rpc.js";
 import { randomTrie } from "./utils.js";
@@ -24,7 +24,7 @@ describe("proofs", async () => {
 		const slot = toBytes(0, 32);
 		const { storageProof } = await ethGetProof(F.provider, C.target, [slot]);
 		const path = toNibblePath(keccak256(slot));
-		const node = insertNode(undefined, path, toBytes(0));
+		const node = insertLeaf(undefined, path, toBytes(0));
 		const proof = getProof(node, path).map(toHex);
 		expect(proof).toStrictEqual(storageProof[0].proof);
 	});

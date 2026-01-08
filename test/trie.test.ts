@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
 	deleteNode,
+	extractNode,
 	findLeaf,
+	insertLeaf,
 	insertNode,
 	isBranch,
 	isExtension,
@@ -10,6 +12,7 @@ import {
 } from "../src/trie.js";
 import { keccak256 } from "../src/utils.js";
 import { randomTrie } from "./utils.js";
+import { toJSON } from "../src/json.js";
 
 describe("trie", () => {
 	describe("findNode", () => {
@@ -42,7 +45,7 @@ describe("trie", () => {
 			//   / \
 			// [0] [1]
 			let a = undefined;
-			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 0), Uint8Array.of(1));
 			expect(isLeaf(a)).toBeTrue();
 			expect(deleteNode(a, Uint8Array.of(0))).toBeUndefined();
 		});
@@ -54,11 +57,11 @@ describe("trie", () => {
 			//   / \    \
 			// [0] [1]   [1]
 			let a = undefined;
-			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(1, 1), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 1), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(1, 1), Uint8Array.of(1));
 			let b = undefined;
-			b = insertNode(b, Uint8Array.of(1, 1), Uint8Array.of(1));
+			b = insertLeaf(b, Uint8Array.of(1, 1), Uint8Array.of(1));
 			expect(isBranch(a)).toBeTrue();
 			expect(deleteNode(a, Uint8Array.of(0))).toStrictEqual(b);
 			expect(isLeaf(b));
@@ -71,12 +74,12 @@ describe("trie", () => {
 			//   /    / \
 			// [0]  [0] [1]
 			let a = undefined;
-			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(1, 0), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(1, 1), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(1, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(1, 1), Uint8Array.of(1));
 			let b = undefined;
-			b = insertNode(b, Uint8Array.of(1, 0), Uint8Array.of(1));
-			b = insertNode(b, Uint8Array.of(1, 1), Uint8Array.of(1));
+			b = insertLeaf(b, Uint8Array.of(1, 0), Uint8Array.of(1));
+			b = insertLeaf(b, Uint8Array.of(1, 1), Uint8Array.of(1));
 			expect(isBranch(a)).toBeTrue();
 			expect(deleteNode(a, Uint8Array.of(0))).toStrictEqual(b);
 			expect(isExtension(b)).toBeTrue();
@@ -89,8 +92,8 @@ describe("trie", () => {
 			//   / \
 			// [0] [1]
 			let a = undefined;
-			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 1), Uint8Array.of(1));
 			expect(isExtension(a)).toBeTrue();
 			expect(deleteNode(a, Uint8Array.of(0))).toBeUndefined();
 		});
@@ -102,13 +105,40 @@ describe("trie", () => {
 			//   /  \
 			// [0]* [1]
 			let a = undefined;
-			a = insertNode(a, Uint8Array.of(0, 0), Uint8Array.of(1));
-			a = insertNode(a, Uint8Array.of(0, 1), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 0), Uint8Array.of(1));
+			a = insertLeaf(a, Uint8Array.of(0, 1), Uint8Array.of(1));
 			let b = undefined;
-			b = insertNode(b, Uint8Array.of(0, 1), Uint8Array.of(1));
+			b = insertLeaf(b, Uint8Array.of(0, 1), Uint8Array.of(1));
 			expect(isExtension(a)).toBeTrue();
 			expect(deleteNode(a, Uint8Array.of(0, 0))).toStrictEqual(b);
 			expect(isLeaf(b)).toBeTrue();
 		});
+	});
+
+
+	describe('extractNode', () => {
+
+
+		test("a", () => {
+			const { node, storage } = randomTrie(4);
+
+
+			const index = (storage.length * Math.random()) | 0;
+			const [,,path] = storage[index];
+			const part = extractNode(node, path);
+			const rest = deleteNode(node, path);
+
+			console.log(toJSON(node));
+
+			console.log(toJSON(part));
+			console.log(toJSON(rest));
+			console.log(toJSON(insertNode(rest, path, part)));
+
+
+			const node2 = insertNode(rest, path, part);
+			//expect(node2).toStrictEqual(node);
+		});
+
+
 	});
 });

@@ -48,6 +48,51 @@ function startsWith(path: Uint8Array, prefix: Uint8Array): number {
 	return n;
 }
 
+export function truncateNode(node: MaybeNode, depth: number) {
+	if (!node || depth < 0) return;
+	if (isBranch(node)) {
+		
+		node.children.forEach((x, i) => {
+
+
+		});
+	} else if (isExtension(node)) {
+
+	} else {
+
+	}
+}
+
+export function extractNode(node: MaybeNode, path: Uint8Array): MaybeNode {
+	if (!path.length) throw new Error('bug');
+	while (node) {
+		if (!path.length) return node;
+		if (isBranch(node)) {
+			node = node.children[path[0]];
+			path = path.subarray(1);
+		} else if (isExtension(node)) {
+			const part = node.path;
+			const i = common(path, part);
+			if (i === part.length) {
+				node = node.child;
+				path = path.subarray(i);
+			} else if (i === path.length) {
+				return { path: part.subarray(i), child: node.child };
+			} else {
+				return;
+			}
+		} else {
+			const part = node.path;
+			const i = common(path, part);
+			if (i === path.length) {
+				return { path: part.subarray(i), value: node.value };
+			} else {
+				return;
+			}
+		}
+	}
+}
+
 export function findLeaf(
 	node: MaybeNode,
 	path: Uint8Array
@@ -90,7 +135,57 @@ export function getProof(node: MaybeNode, path: Uint8Array): Uint8Array[] {
 	return ret;
 }
 
+function withPath(path: Uint8Array, node: Node) {
+	if (!path.length) {
+		return node;
+	} else if (isLeaf(node)) {
+		return { path: concat(path, node.path), value: node.value };
+	} else {
+		return { path: path.slice(), child: node };
+	}
+}
+
 export function insertNode(
+	node: MaybeNode,
+	path: Uint8Array,
+	newNode: MaybeNode
+): MaybeNode {
+	if (!newNode) return deleteNode(node, path);
+	if (isExtension(newNode)) {
+		path = concat(path, newNode.path);
+		newNode = newNode.child;
+	}
+	if (!node) return withPath(path, newNode);
+	if (isBranch(node)) {
+		const i = path[0];
+		const children = node.children.slice();
+		children[i] = insertNode(children[i], path.subarray(1), newNode);
+		return { children };
+	} else if (isExtension(node)) {
+		const part = node.path;
+		const i = common(part, path);
+		if (i === part.length) {
+			return {
+				path: part,
+				child: insertNode(node.child, path.subarray(i), newNode)!,
+			};
+		}
+		const b = newBranch();
+		b.children[part[i]] = withPath(part.subarray(i + 1), node.child);
+		b.children[path[i]] = withPath(path.subarray(i + 1), newNode);
+		return withPath(path.subarray(0, i), b);
+	} else {
+		const part = node.path;
+		const i = common(part, path);
+		if (i === part.length && i === path.length) return newNode;
+		const b = newBranch();
+		b.children[part[i]] = newLeaf(part.subarray(i + 1), node.value);
+		b.children[path[i]] = withPath(path.subarray(i + 1), newNode);
+		return withPath(path.subarray(0, i), b);
+	}
+}
+
+export function insertLeaf(
 	node: MaybeNode,
 	path: Uint8Array,
 	value: Uint8Array
@@ -100,7 +195,7 @@ export function insertNode(
 	} else if (isBranch(node)) {
 		const i = path[0];
 		const children = node.children.slice();
-		children[i] = insertNode(children[i], path.subarray(1), value);
+		children[i] = insertLeaf(children[i], path.subarray(1), value);
 		return { children };
 	} else if (isExtension(node)) {
 		const other = node.path;
@@ -108,7 +203,7 @@ export function insertNode(
 		if (i === other.length) {
 			return {
 				path: other,
-				child: insertNode(node.child, path.subarray(i), value),
+				child: insertLeaf(node.child, path.subarray(i), value),
 			};
 		}
 		const b = newBranch();
@@ -174,7 +269,7 @@ export function deleteNode(node: MaybeNode, path: Uint8Array): MaybeNode {
 	}
 }
 
-function newLeaf(path: Uint8Array, value: Uint8Array): LeafNode {
+export function newLeaf(path: Uint8Array, value: Uint8Array): LeafNode {
 	if (!value.length) {
 		value = EMPTY_BYTES;
 		if (!path.length) return EMPTY_LEAF;
@@ -184,7 +279,7 @@ function newLeaf(path: Uint8Array, value: Uint8Array): LeafNode {
 	return { path, value };
 }
 
-function newBranch(): BranchNode {
+export function newBranch(): BranchNode {
 	return { children: Array(16).fill(undefined) };
 }
 

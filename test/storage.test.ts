@@ -4,7 +4,7 @@ import {
 	type MaybeNode,
 	deleteNode,
 	getRootHash,
-	insertNode,
+	insertLeaf,
 	toNibblePath,
 } from "../src/trie.js";
 import { keccak256, toBigInt, toBytes, toHex } from "../src/utils.js";
@@ -54,7 +54,7 @@ describe("storage", async () => {
 		const { storageHash } = await ethGetProof(F.provider, C.target);
 		const key = toBytes(0, 32);
 		let node = undefined;
-		node = insertNode(node, toNibblePath(keccak256(key)), toBytes(header));
+		node = insertLeaf(node, toNibblePath(keccak256(key)), toBytes(header));
 		node = insertBytes(node, key, v, mode);
 		expect(toHex(getRootHash(node))).toStrictEqual(storageHash);
 	});
@@ -78,7 +78,9 @@ describe("storage", async () => {
 		expect(toHex(getRootHash(node))).toStrictEqual(storageHash);
 	});
 
-	function contractWithStorage(storage: [Uint8Array, Uint8Array][]) {
+	function contractWithStorage(
+		storage: [Uint8Array, Uint8Array, Uint8Array][]
+	) {
 		return F.deploy(`contract X {
 			constructor() {
 				assembly {
@@ -88,7 +90,7 @@ describe("storage", async () => {
 		}`);
 	}
 
-	describe("insertNode", () => {
+	describe("insertLeaf", () => {
 		for (let i = 0; i < FUZZ; ++i) {
 			const { node, storage } = randomTrie();
 			test(`#${i} x ${storage.length}`, async () => {
@@ -104,11 +106,10 @@ describe("storage", async () => {
 			const { node, storage } = randomTrie();
 			test(`#${i} x ${storage.length}`, async () => {
 				const deletedIndex = (storage.length * Math.random()) | 0;
-				const [deletedKey] = storage[deletedIndex];
-				storage.splice(deletedIndex, 1);
+				const [[, , path]] = storage.splice(deletedIndex, 1);
 				const C = await contractWithStorage(storage);
 				const { storageHash } = await ethGetProof(F.provider, C.target);
-				const node2 = deleteNode(node, toNibblePath(keccak256(deletedKey)));
+				const node2 = deleteNode(node, path);
 				expect(toHex(getRootHash(node2))).toStrictEqual(storageHash);
 			});
 		}
