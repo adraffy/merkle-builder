@@ -45,11 +45,11 @@ const args = parseArgs({
 });
 
 const chainInfo = determineChain(args.values.chain);
-const registarAddress = getRegistrarAddress(chainInfo.testnet);
+const registrarAddress = getRegistrarAddress(chainInfo.testnet);
 const realRPC = determineProvider(chainInfo);
 
 console.log(`Chain: ${chainInfo.name.toUpperCase()} (${chainInfo.id})`);
-console.log(`Contract: ${chainInfo.explorer}/address/${registarAddress}`);
+console.log(`Contract: ${chainInfo.explorer}/address/${registrarAddress}`);
 console.log(`Public RPC: ${chainInfo.publicRPC}`);
 console.log(`Prover RPC: ${realRPC}`);
 
@@ -114,7 +114,7 @@ const realProvider = new JsonRpcProvider(realRPC, chainInfo.id, {
 	batchMaxCount: 1,
 });
 
-const registrar = new Contract(registarAddress, REGISTRAR_ABI, realProvider);
+const registrar = new Contract(registrarAddress, REGISTRAR_ABI, realProvider);
 
 const blockTag = `0x${(block0 - 1).toString(16)}`;
 
@@ -146,7 +146,7 @@ const fakeProvider: RawProvider = {
 				});
 				console.timeEnd("getProof");
 				return {
-					address: registarAddress.toLowerCase() as typeof registarAddress,
+					address: registrarAddress.toLowerCase() as typeof registrarAddress,
 					storageHash,
 					storageProof,
 				} satisfies EthGetProof;
@@ -172,13 +172,13 @@ const slots = KNOWN_ADDRS.map((x) => getPrimarySlot(x));
 
 const realStorage = await ethGetStorage(
 	realProvider,
-	registarAddress,
+	registrarAddress,
 	slots[0],
 	blockTag
 );
 const fakeStorage = await ethGetStorage(
 	fakeProvider,
-	registarAddress,
+	registrarAddress,
 	slots[0],
 	blockTag
 );
@@ -189,13 +189,13 @@ console.log(
 
 const realProof = await ethGetProof(
 	realProvider,
-	registarAddress,
+	registrarAddress,
 	slots,
 	blockTag
 );
 const fakeProof = await ethGetProof(
 	fakeProvider,
-	registarAddress,
+	registrarAddress,
 	slots,
 	blockTag
 );
@@ -218,7 +218,7 @@ async function sync() {
 	p.on("debug", (x) => {
 		if (x.action === "sendRpcPayload") calls++;
 	});
-	const registrar = new Contract(registarAddress, REGISTRAR_ABI, p);
+	const registrar = new Contract(registrarAddress, REGISTRAR_ABI, p);
 	while (true) {
 		const t0 = Date.now();
 		let block1 = await p.getBlockNumber();
