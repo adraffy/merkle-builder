@@ -22,7 +22,14 @@ import {
 	type EthGetProof,
 	type RawProvider,
 } from "../test/rpc.js";
-import { getPrimarySlot, KNOWN_ADDRS, setOwner } from "./registrar.js";
+import {
+	determineChain,
+	determineProvider,
+	getPrimarySlot,
+	getRegistrarAddress,
+	KNOWN_ADDRS,
+	setOwner,
+} from "./registrar.js";
 
 const REGISTRAR_ABI = new Interface([
 	`function owner() view returns (address)`,
@@ -32,84 +39,13 @@ const REGISTRAR_ABI = new Interface([
 const args = parseArgs({
 	args: process.argv.slice(2),
 	options: {
-		chain: {
-			type: "string",
-			short: "c",
-		},
+		chain: { type: "string", short: "c" },
 	},
 	strict: true,
 });
 
-type ChainInfo = {
-	name: string;
-	id: bigint;
-	ownable?: boolean;
-	publicRPC?: string;
-	drpcSlug?: string;
-	alchemySlug?: string;
-	explorer: string;
-	createdAtBlock: number;
-	logStep?: number;
-	testnet?: boolean;
-};
-
-function determineChain(name = "op"): ChainInfo {
-	switch (name.toLowerCase()) {
-		case undefined: // default
-		case "arb": {
-			return {
-				name: "arbitrum",
-				id: 42161n,
-				//publicRPC: "https://arb1.arbitrum.io/rpc",
-				drpcSlug: "arbitrum",
-				alchemySlug: "arb-mainnet",
-				explorer: "https://arbiscan.io",
-				createdAtBlock: 349263357,
-				logStep: 50000, // 250ms blocks
-			};
-		}
-		case "op":
-			return {
-				name: "optimism",
-				id: 10n,
-				explorer: "https://optimistic.etherscan.io",
-				publicRPC: "https://mainnet.optimism.io",
-				drpcSlug: "optimism",
-				alchemySlug: "opt-mainnet",
-				createdAtBlock: 137403854,
-			};
-		case "base":
-			return {
-				name: "base",
-				id: 8453n,
-				ownable: true,
-				explorer: "https://basescan.org",
-				publicRPC: "https://mainnet.base.org",
-				drpcSlug: "base",
-				alchemySlug: "base-mainnet",
-				createdAtBlock: 31808582,
-			};
-		default:
-			throw new Error(`unsupported chain: ${name}`);
-	}
-}
-
-function determineProvider(info: ChainInfo) {
-	const proto = "https";
-	let key: string | undefined;
-	if (info.drpcSlug && (key = process.env.DRPC_KEY)) {
-		return `${proto}://lb.drpc.live/${info.drpcSlug}/${key}`;
-	} else if (info.alchemySlug && (key = process.env.ALCHEMY_KEY)) {
-		return `${proto}://${info.alchemySlug}.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`;
-	} else {
-		throw new Error(`missing .env`);
-	}
-}
-
 const chainInfo = determineChain(args.values.chain);
-const registarAddress = chainInfo.testnet // https://docs.ens.domains/ensip/19/#annex-supported-chains
-	? "0x00000BeEF055f7934784D6d81b6BC86665630dbA"
-	: "0x0000000000D8e504002cC26E3Ec46D81971C1664";
+const registarAddress = getRegistrarAddress(chainInfo.testnet);
 const realRPC = determineProvider(chainInfo);
 
 console.log(`Chain: ${chainInfo.name.toUpperCase()} (${chainInfo.id})`);

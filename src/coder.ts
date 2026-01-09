@@ -16,9 +16,14 @@ const TY_EMPTY_LEAF = 3;
 const TY_LEAF = 4;
 const TY_BRANCH_WITH_CACHE = 5;
 
-export const MAX_LENGTH = (1 << 22) - 1; // 4194304
+export const MAX_SIZE = (1 << 22) - 1; // 4194304
 
 export class Coder {
+	static getByteCount(node: MaybeNode) {
+		const c = new this();
+		c.writeNode(node);
+		return c.pos;
+	}
 	public pos = 0;
 	constructor(public buf: Uint8Array = new Uint8Array(1024)) {}
 	reset() {

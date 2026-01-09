@@ -48,24 +48,20 @@ function startsWith(path: Uint8Array, prefix: Uint8Array): number {
 	return n;
 }
 
-export function copyNode<T extends MaybeNode>(
-	node: T,
-	copyPath = true,
-	copyData = false
-): T {
+export function copyNode<T extends MaybeNode>(node: T, copyPath = true): T {
 	if (isLeaf(node)) {
 		return newLeaf(
 			copyPath && node.path.length ? node.path.slice() : node.path,
-			copyData && node.data.length ? node.data.slice() : node.data
+			node.data
 		) as T;
 	} else if (isExtension(node)) {
 		const copy = { ...node };
 		if (copyPath && copy.path.length) copy.path = copy.path.slice();
-		copy.child = copyNode(copy.child, copyPath, copyData);
+		copy.child = copyNode(copy.child, copyPath);
 		return copy;
 	} else if (isBranch(node)) {
 		const copy = { ...node };
-		copy.children = copy.children.map((x) => copyNode(x, copyPath, copyData));
+		copy.children = copy.children.map((x) => copyNode(x, copyPath));
 		return copy;
 	} else {
 		return node;

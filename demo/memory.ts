@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import { Database } from "bun:sqlite";
 import { deepEquals } from "bun";
 import { Coder } from "../src/coder.js";
@@ -11,13 +12,26 @@ import {
 	toNibblePath,
 	type MaybeNode,
 } from "../src/trie.js";
-import { getPrimarySlot, KNOWN_ADDRS } from "./registrar.js";
+import { determineChain, getPrimarySlot, KNOWN_ADDRS } from "./registrar.js";
 import { getByteCount, getNodeCount } from "../src/inspect.js";
 import { graftLimb, pluckLimbs } from "../src/surgery.js";
 
-const chainName = "base"; // 'optimism', 'arbitrum';
+const args = parseArgs({
+	args: process.argv.slice(2),
+	options: {
+		chain: { type: "string", short: "c" },
+		depth: { type: "string", short: "d", default: "2" },
+	},
+	strict: true,
+});
 
-const db = new Database(`${import.meta.dir}/${chainName}.sqlite`);
+const chainInfo = determineChain(args.values.chain);
+console.log(`Chain: ${chainInfo.name}`);
+
+const depth = parseInt(args.values.depth);
+console.log(`Depth: ${depth}`);
+
+const db = new Database(`${import.meta.dir}/${chainInfo.name}.sqlite`);
 
 let node: MaybeNode;
 console.time("rebuildTrie");
@@ -35,61 +49,57 @@ for (const row of db
 console.timeEnd("rebuildTrie");
 
 console.log(`NodeCount: ${getNodeCount(node)}`);
-console.log(`ByteCount: ${getByteCount(node)}`);
+const byteCount = getByteCount(node);
+console.log(`ByteCount: ${formatBytes(byteCount)}`);
 
-// prehash
+// hash
 console.time("getRootHash");
 const storageHash = toHex(getRootHash(node));
 console.timeEnd("getRootHash");
 console.log(`StorageHash: ${storageHash}`);
-
-console.log(`ByteCount: ${getByteCount(node)}`);
+console.log(`CacheByteCount: ${formatBytes(getByteCount(node) - byteCount)}`);
 
 // split
-const DEPTH = 2;
-const { trunk, limbs } = pluckLimbs(copyNode(node), DEPTH);
+const { trunk, limbs } = pluckLimbs(copyNode(node), depth);
 console.log(`LimbCount: ${limbs.length}`);
-console.log(`Trunk Size: ${getEncodedNodeSize(trunk)}`);
+console.log(`Trunk Size: ${formatBytes(Coder.getByteCount(trunk))}`);
 console.log(
-	`Max Limb Size: ${limbs.reduce(
-		(a, x) => Math.max(a, getEncodedNodeSize(x[1])),
-		0
+	`Max Limb Size: ${formatBytes(
+		limbs.reduce((a, x) => Math.max(a, Coder.getByteCount(x[1])), 0)
 	)}`
 );
 
 // join
 const copy = limbs.reduce((a, x) => graftLimb(a, ...x), copyNode(trunk));
-console.log(`Copy Hash: ${toHex(getRootHash(copy)) === storageHash}`);
+console.log(
+	`Reproduce StorageHash: ${toHex(getRootHash(copy)) === storageHash}`
+);
 
-// in-memory
+// load sql
 const mem = new Database();
-mem.run(`CREATE TABLE limbs (key STRING PRIMARY KEY, value BLOB)`);
-const select = mem.prepare<{ value: Uint8Array }, string>(
+mem.run(`CREATE TABLE limbs (key BLOB PRIMARY KEY, value BLOB)`);
+const select = mem.prepare<{ value: Uint8Array }, Uint8Array>(
 	"SELECT value FROM limbs WHERE key = ?"
 );
-const insert = mem.prepare<void, [string, Uint8Array]>(
+const insert = mem.prepare<void, [Uint8Array, Uint8Array]>(
 	"INSERT INTO limbs (key,value) VALUES(?,?)"
+);
+const memory = mem.prepare<{ n: number }, []>(
+	`SELECT page_count * page_size AS n FROM pragma_page_count(), pragma_page_size()`
 );
 mem.transaction(() => {
 	const c = new Coder();
 	c.writeNode(trunk);
-	insert.run("", c.bytes);
-	for (const [path, limb] of limbs) {
+	insert.run(new Uint8Array(0), c.bytes);
+	for (const [part, limb] of limbs) {
 		c.reset();
 		c.writeNode(limb);
-		insert.run(storageKey(path), c.bytes);
+		insert.run(part, c.bytes);
 	}
 })();
-console.log(
-	`Memory: ${
-		mem
-			.query(
-				`SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
-			)
-			.values()[0][0]
-	}`
-);
+console.log(`Database Memory: ${formatBytes(memory.get()!.n)}`);
 
+// query sql
 for (const addr of KNOWN_ADDRS) {
 	console.log();
 	lookup(addr, false);
@@ -99,19 +109,18 @@ for (const addr of KNOWN_ADDRS) {
 function lookup(address: Hex, loadTrunk: boolean) {
 	console.time("lookup");
 	let temp = loadTrunk
-		? new Coder(select.get("")!.value).readNode()
+		? new Coder(select.get(new Uint8Array(0))!.value).readNode()
 		: copyNode(trunk);
 	const slot = getPrimarySlot(address);
 	const path = toNibblePath(keccak256(slot));
-	const part = path.subarray(0, DEPTH);
-	const limb = select.get(storageKey(part))?.value;
+	const part = path.subarray(0, depth);
+	const limb = select.get(part)?.value;
 	if (limb) {
 		temp = graftLimb(temp, part, new Coder(limb).readNode()!);
 	}
 	console.log({
 		loadTrunk,
 		address,
-		path: storageKey(path),
 		hasLimb: !!limb,
 		sameProof: deepEquals(getProof(temp, path), getProof(node, path)),
 		sameLeaf: deepEquals(findLeaf(temp, path), findLeaf(node, path)),
@@ -120,12 +129,10 @@ function lookup(address: Hex, loadTrunk: boolean) {
 	console.timeEnd("lookup");
 }
 
-function storageKey(path: Uint8Array) {
-	return Array.from(path, (x) => x.toString(16)).join("");
-}
-
-function getEncodedNodeSize(node: MaybeNode) {
-	const c = new Coder();
-	c.writeNode(node);
-	return c.pos;
+function formatBytes(size: number) {
+	if (size < 1000) return `${size}B`;
+	size /= 1024;
+	if (size < 1000) return `${size.toFixed(1)}KB`;
+	size /= 1024;
+	return `${size.toFixed(1)}MB`;
 }

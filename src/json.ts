@@ -4,9 +4,6 @@ import {
 	isExtension,
 	newBranch,
 	newLeaf,
-	type BranchNode,
-	type ExtensionNode,
-	type LeafNode,
 	type MaybeNode,
 } from "./trie.js";
 import { concat, toBytes } from "./utils.js";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Coder, MAX_LENGTH } from "../src/coder.js";
+import { Coder, MAX_SIZE } from "../src/coder.js";
 import { randomTrie } from "./utils.js";
 
 describe("coder", () => {
@@ -8,17 +8,17 @@ describe("coder", () => {
 			const coder = new Coder();
 			const { node } = randomTrie();
 			coder.writeNode(node);
-			coder.pos = 0;
+			coder.reset();
 			expect(coder.readNode()).toStrictEqual(node);
 		});
 	}
 
-	test('MAX_LENGTH', () => {
+	test("MAX_SIZE", () => {
 		const coder = new Coder();
-		for (let i = 0; i <= MAX_LENGTH; ++i) {
-			coder.pos = 0;
+		for (let i = 0; i <= MAX_SIZE; ++i) {
+			coder.reset();
 			coder.writeSize(i);
-			coder.pos = 0;
+			coder.reset();
 			expect(coder.readSize()).toStrictEqual(i);
 		}
 	});
