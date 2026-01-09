@@ -22,7 +22,7 @@ import {
 	type EthGetProof,
 	type RawProvider,
 } from "../test/rpc.js";
-import { getPrimarySlot, setOwner } from "./registrar.js";
+import { getPrimarySlot, KNOWN_ADDRS, setOwner } from "./registrar.js";
 
 const REGISTRAR_ABI = new Interface([
 	`function owner() view returns (address)`,
@@ -232,11 +232,7 @@ const fakeProvider: RawProvider = {
 	},
 };
 
-const slots = [
-	getPrimarySlot("0x69420f05A11f617B4B74fFe2E04B2D300dFA556F"), // tate
-	getPrimarySlot("0x51050ec063d393217B436747617aD1C2285Aeeee"), // raffy
-	getPrimarySlot("0x000000000000000000000000000000000000beef"), // dne
-];
+const slots = KNOWN_ADDRS.map((x) => getPrimarySlot(x));
 
 const realStorage = await ethGetStorage(
 	realProvider,

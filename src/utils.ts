@@ -22,10 +22,11 @@ export function followSlot(slot: bigint, key: Uint8Array) {
 	return keccak256(concat(key, toBytes(slot, 32)));
 }
 
+// always makes a copy
 export function trimLeadingZeros(v: Uint8Array): Uint8Array {
 	let i = 0;
 	while (v[i] === 0) ++i;
-	return v.subarray(i);
+	return v.slice(i);
 }
 
 export function toBytes(x: string | number | bigint, size?: number): Uint8Array {
@@ -40,15 +41,8 @@ export function toBytes(x: string | number | bigint, size?: number): Uint8Array 
 }
 
 export function toBigInt(v: Uint8Array): bigint {
-	return trimLeadingZeros(v).reduce<bigint>(
-		(a, x) => (a << 8n) | BigInt(x),
-		0n
-	);
+	return v.length ? BigInt(toHex(v)) : 0n;
 }
-
-// export function toBigInt(v: Uint8Array): bigint {
-// 	return v.length ? BigInt(toHex(v)) : 0n;
-// }
 
 //export function setBigInt(v: Uint8Array, i: number, x: bigint, size?: number) {
 // 	v.set(toBytes(x, size), i);

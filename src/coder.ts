@@ -20,7 +20,10 @@ export const MAX_LENGTH = (1 << 22) - 1; // 4194304
 
 export class Coder {
 	public pos = 0;
-	constructor(public buf: Uint8Array<ArrayBuffer> = new Uint8Array(1024)) {}
+	constructor(public buf: Uint8Array = new Uint8Array(1024)) {}
+	reset() {
+		this.pos = 0;
+	}
 	expand(need: number) {
 		const required = this.pos + need;
 		let size = this.buf.length;
@@ -119,7 +122,7 @@ export class Coder {
 			case TY_EXTENSION: {
 				const path = this.readPath();
 				const child = this.readNode();
-				if (!child) throw new Error("bug");
+				if (!isBranch(child)) throw new Error("bug");
 				return { path, child };
 			}
 			case TY_EMPTY_LEAF:
@@ -161,6 +164,6 @@ export class Coder {
 		}
 	}
 	get bytes() {
-		return this.buf.subarray(0, this.pos);
+		return this.buf.subarray(0, this.pos); // warning: not a copy
 	}
 }

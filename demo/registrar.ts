@@ -17,3 +17,9 @@ export function setOwner(node: MaybeNode, owner: Hex): MaybeNode {
 export function getPrimarySlot(addr: Hex) {
 	return followSlot(SLOT_NAMES, toBytes(addr, 32));
 }
+
+export const KNOWN_ADDRS = [
+	"0x69420f05A11f617B4B74fFe2E04B2D300dFA556F", // tate
+	"0x51050ec063d393217B436747617aD1C2285Aeeee", // raffy
+	"0x000000000000000000000000000000000000beef", // dne
+] as const;
