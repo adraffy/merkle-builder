@@ -2,7 +2,7 @@ import {
 	deleteNode,
 	EMPTY_BYTES,
 	findLeaf,
-	insertNode,
+	insertLeaf,
 	toNibblePath,
 	type MaybeNode,
 } from "./trie.js";
@@ -24,7 +24,7 @@ export function insertBytes(
 	const path = toNibblePath(key);
 	let oldSize = 0;
 	if (mode !== "ignore") {
-		const prior = findLeaf(node, path)?.value;
+		const prior = findLeaf(node, path)?.data;
 		if (prior?.length && prior[prior.length - 1] & 1) {
 			// small bytes can be ignored since the header is replaced
 			oldSize = Number(toBigInt(prior) >> 1n);
@@ -39,13 +39,13 @@ export function insertBytes(
 		} else {
 			const word = bytes32(value);
 			word[31] = value.length << 1;
-			node = insertNode(node, path, trimLeadingZeros(word));
+			node = insertLeaf(node, path, trimLeadingZeros(word));
 		}
 	} else {
-		node = insertNode(node, path, toBytes((BigInt(value.length) << 1n) | 1n));
-		for (; pos < value.length; inc(key)) {
+		node = insertLeaf(node, path, toBytes((BigInt(value.length) << 1n) | 1n));
+		for (; pos < value.length; increment(key)) {
 			const end = pos + 32;
-			node = insertNode(
+			node = insertLeaf(
 				node,
 				toNibblePath(keccak256(key)),
 				trimLeadingZeros(
@@ -58,18 +58,18 @@ export function insertBytes(
 		}
 	}
 	if (mode === "delete") {
-		for (; pos < oldSize; inc(key), pos += 32) {
+		for (; pos < oldSize; increment(key), pos += 32) {
 			node = deleteNode(node, toNibblePath(keccak256(key)));
 		}
 	} else if (mode === "zero") {
-		for (; pos < oldSize; inc(key), pos += 32) {
-			node = insertNode(node, toNibblePath(keccak256(key)), EMPTY_BYTES);
+		for (; pos < oldSize; increment(key), pos += 32) {
+			node = insertLeaf(node, toNibblePath(keccak256(key)), EMPTY_BYTES);
 		}
 	}
 	return node;
 }
 
-function inc(v: Uint8Array, max = 255) {
+function increment(v: Uint8Array, max = 255): boolean {
 	let i = v.length;
 	while (i && v[i - 1] === max) --i;
 	if (i) {
@@ -78,6 +78,7 @@ function inc(v: Uint8Array, max = 255) {
 	} else {
 		v.fill(0);
 	}
+	return !!i;
 }
 
 function bytes32(v: Uint8Array) {

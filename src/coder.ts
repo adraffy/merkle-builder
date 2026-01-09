@@ -127,7 +127,7 @@ export class Coder {
 			case TY_LEAF:
 				return {
 					path: this.readPath(),
-					value: this.readSizedBytes(),
+					data: this.readSizedBytes(),
 				};
 			default:
 				throw new Error(`unknown type: ${ty}`);
@@ -145,19 +145,19 @@ export class Coder {
 					: undefined;
 			this.writeByte(cache ? TY_BRANCH_WITH_CACHE : TY_BRANCH);
 			for (const x of node.children) {
-				this.writeNode(x);
+				this.writeNode(x, includeCache);
 			}
 			if (cache) this.writeSizedBytes(cache);
 		} else if (isExtension(node)) {
 			this.writeByte(TY_EXTENSION);
 			this.writePath(node.path);
-			this.writeNode(node.child);
+			this.writeNode(node.child, includeCache);
 		} else if (isEmptyLeaf(node)) {
 			this.writeByte(TY_EMPTY_LEAF);
 		} else {
 			this.writeByte(TY_LEAF);
 			this.writePath(node.path);
-			this.writeSizedBytes(node.value);
+			this.writeSizedBytes(node.data);
 		}
 	}
 	get bytes() {

@@ -30,8 +30,7 @@ export function trimLeadingZeros(v: Uint8Array): Uint8Array {
 
 export function toBytes(x: string | number | bigint, size?: number): Uint8Array {
 	if (typeof x === "string") {
-		if (!/^0x[0-9a-f]*$/i.test(x)) throw new Error(`expected hex: ${x}`);
-		x = x.slice(2);
+		if (x.startsWith('0x')) x = x.slice(2);
 	} else {
 		x = x ? x.toString(16) : "";
 	}
@@ -46,8 +45,13 @@ export function toBigInt(v: Uint8Array): bigint {
 		0n
 	);
 }
+
 // export function toBigInt(v: Uint8Array): bigint {
 // 	return v.length ? BigInt(toHex(v)) : 0n;
+// }
+
+//export function setBigInt(v: Uint8Array, i: number, x: bigint, size?: number) {
+// 	v.set(toBytes(x, size), i);
 // }
 
 export function toHex(v: Uint8Array): Hex {
