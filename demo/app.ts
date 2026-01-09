@@ -11,7 +11,6 @@ import {
 	findLeaf,
 	getProof,
 	getRootHash,
-	insertLeaf,
 	toNibblePath,
 	type MaybeNode,
 } from "../src/trie.js";
@@ -158,8 +157,8 @@ if (1) {
 				addr: Uint8Array;
 				name: Uint8Array;
 			},
-			[number]
-		>("SELECT * FROM names ORDER BY rowid WHERE block < ?")
+			number
+		>("SELECT * FROM names WHERE block < ? ORDER BY rowid")
 		.iterate(block0)) {
 		node = insertBytes(node, getPrimarySlot(toHex(row.addr)), row.name);
 	}
