@@ -1,36 +1,36 @@
 import { concat, keccak256, toHex } from "./utils.js";
 
-type LeafNode = { path: Uint8Array; value: Uint8Array };
-type ExtensionNode = { path: Uint8Array; child: Node };
-type BranchNode = { children: MaybeNode[]; cache?: Uint8Array };
+export type LeafNode = { path: Uint8Array; data: Uint8Array };
+export type ExtensionNode = { path: Uint8Array; child: BranchNode };
+export type BranchNode = { children: MaybeNode[]; cache?: Uint8Array };
 
 export type Node = LeafNode | ExtensionNode | BranchNode;
 export type MaybeNode = Node | undefined;
 
 export const EMPTY_BYTES = new Uint8Array(0);
-export const EMPTY_LEAF: LeafNode = Object.freeze({
+export const EMPTY_LEAF = Object.freeze({
 	path: EMPTY_BYTES,
-	value: EMPTY_BYTES,
-});
+	data: EMPTY_BYTES,
+} satisfies LeafNode);
 
 const RLP_NULL = encodeRlpBytes(EMPTY_BYTES); // 0x80
 const RLP_EMPTY = encodeRlpList([encodeRlpList([])]); // 0xc1c0
 const HASH_NULL = keccak256(RLP_NULL); // 0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421
 
 export function isBranch(node: MaybeNode): node is BranchNode {
-	return !!node && "children" in node;
+	return !!node && ("children" satisfies keyof BranchNode) in node;
 }
 
 export function isExtension(node: MaybeNode): node is ExtensionNode {
-	return !!node && "child" in node;
+	return !!node && ("child" satisfies keyof ExtensionNode) in node;
 }
 
 export function isLeaf(node: MaybeNode): node is LeafNode {
-	return !!node && "value" in node;
+	return !!node && ("data" satisfies keyof LeafNode) in node;
 }
 
 export function isEmptyLeaf(node: MaybeNode) {
-	return isLeaf(node) && !node.path.length && !node.value.length;
+	return isLeaf(node) && !node.path.length && !node.data.length;
 }
 
 // return common prefix length
@@ -48,48 +48,27 @@ function startsWith(path: Uint8Array, prefix: Uint8Array): number {
 	return n;
 }
 
-export function truncateNode(node: MaybeNode, depth: number) {
-	if (!node || depth < 0) return;
-	if (isBranch(node)) {
-		
-		node.children.forEach((x, i) => {
-
-
-		});
+export function copyNode<T extends MaybeNode>(
+	node: T,
+	copyPath = true,
+	copyData = false
+): T {
+	if (isLeaf(node)) {
+		return newLeaf(
+			copyPath && node.path.length ? node.path.slice() : node.path,
+			copyData && node.data.length ? node.data.slice() : node.data
+		) as T;
 	} else if (isExtension(node)) {
-
+		const copy = { ...node };
+		if (copyPath && copy.path.length) copy.path = copy.path.slice();
+		copy.child = copyNode(copy.child, copyPath, copyData);
+		return copy;
+	} else if (isBranch(node)) {
+		const copy = { ...node };
+		copy.children = copy.children.map((x) => copyNode(x, copyPath, copyData));
+		return copy;
 	} else {
-
-	}
-}
-
-export function extractNode(node: MaybeNode, path: Uint8Array): MaybeNode {
-	if (!path.length) throw new Error('bug');
-	while (node) {
-		if (!path.length) return node;
-		if (isBranch(node)) {
-			node = node.children[path[0]];
-			path = path.subarray(1);
-		} else if (isExtension(node)) {
-			const part = node.path;
-			const i = common(path, part);
-			if (i === part.length) {
-				node = node.child;
-				path = path.subarray(i);
-			} else if (i === path.length) {
-				return { path: part.subarray(i), child: node.child };
-			} else {
-				return;
-			}
-		} else {
-			const part = node.path;
-			const i = common(path, part);
-			if (i === path.length) {
-				return { path: part.subarray(i), value: node.value };
-			} else {
-				return;
-			}
-		}
+		return node;
 	}
 }
 
@@ -135,67 +114,27 @@ export function getProof(node: MaybeNode, path: Uint8Array): Uint8Array[] {
 	return ret;
 }
 
-function withPath(path: Uint8Array, node: Node) {
-	if (!path.length) {
-		return node;
-	} else if (isLeaf(node)) {
-		return { path: concat(path, node.path), value: node.value };
-	} else {
-		return { path: path.slice(), child: node };
-	}
-}
-
-export function insertNode(
-	node: MaybeNode,
+export function insertLeaf(
+	node: BranchNode,
 	path: Uint8Array,
-	newNode: MaybeNode
-): MaybeNode {
-	if (!newNode) return deleteNode(node, path);
-	if (isExtension(newNode)) {
-		path = concat(path, newNode.path);
-		newNode = newNode.child;
-	}
-	if (!node) return withPath(path, newNode);
-	if (isBranch(node)) {
-		const i = path[0];
-		const children = node.children.slice();
-		children[i] = insertNode(children[i], path.subarray(1), newNode);
-		return { children };
-	} else if (isExtension(node)) {
-		const part = node.path;
-		const i = common(part, path);
-		if (i === part.length) {
-			return {
-				path: part,
-				child: insertNode(node.child, path.subarray(i), newNode)!,
-			};
-		}
-		const b = newBranch();
-		b.children[part[i]] = withPath(part.subarray(i + 1), node.child);
-		b.children[path[i]] = withPath(path.subarray(i + 1), newNode);
-		return withPath(path.subarray(0, i), b);
-	} else {
-		const part = node.path;
-		const i = common(part, path);
-		if (i === part.length && i === path.length) return newNode;
-		const b = newBranch();
-		b.children[part[i]] = newLeaf(part.subarray(i + 1), node.value);
-		b.children[path[i]] = withPath(path.subarray(i + 1), newNode);
-		return withPath(path.subarray(0, i), b);
-	}
-}
-
+	data: Uint8Array
+): BranchNode;
 export function insertLeaf(
 	node: MaybeNode,
 	path: Uint8Array,
-	value: Uint8Array
-): Node {
+	data: Uint8Array
+): Node;
+export function insertLeaf(
+	node: MaybeNode,
+	path: Uint8Array,
+	data: Uint8Array
+) {
 	if (!node) {
-		return newLeaf(path, value);
+		return newLeaf(path, data);
 	} else if (isBranch(node)) {
 		const i = path[0];
 		const children = node.children.slice();
-		children[i] = insertLeaf(children[i], path.subarray(1), value);
+		children[i] = insertLeaf(children[i], path.subarray(1), data);
 		return { children };
 	} else if (isExtension(node)) {
 		const other = node.path;
@@ -203,30 +142,57 @@ export function insertLeaf(
 		if (i === other.length) {
 			return {
 				path: other,
-				child: insertLeaf(node.child, path.subarray(i), value),
+				child: insertLeaf(node.child, path.subarray(i), data),
 			};
 		}
 		const b = newBranch();
-		if (i < other.length) {
-			const rest = other.subarray(i + 1);
-			b.children[other[i]] = rest.length
-				? { path: rest, child: node.child }
-				: node.child;
-		}
-		b.children[path[i]] = newLeaf(path.subarray(i + 1), value);
+		const rest = other.subarray(i + 1);
+		b.children[other[i]] = rest.length
+			? { path: rest, child: node.child }
+			: node.child;
+		b.children[path[i]] = newLeaf(path.subarray(i + 1), data);
 		return i ? { path: path.subarray(0, i), child: b } : b;
 	} else {
 		const other = node.path;
 		const i = common(other, path);
 		if (i === other.length && i === path.length) {
-			return newLeaf(path, value);
+			return newLeaf(path, data);
 		}
 		const b = newBranch();
 		if (i < other.length) {
-			b.children[other[i]] = newLeaf(other.subarray(i + 1), node.value);
+			b.children[other[i]] = newLeaf(other.subarray(i + 1), node.data);
 		}
-		b.children[path[i]] = newLeaf(path.subarray(i + 1), value);
+		b.children[path[i]] = newLeaf(path.subarray(i + 1), data);
 		return i ? { path: path.subarray(0, i), child: b } : b;
+	}
+}
+
+export function extractNode(node: MaybeNode, path: Uint8Array): MaybeNode {
+	while (node) {
+		if (!path.length) return node;
+		if (isBranch(node)) {
+			node = node.children[path[0]];
+			path = path.subarray(1);
+		} else if (isExtension(node)) {
+			const part = node.path;
+			const i = common(path, part);
+			if (i === part.length) {
+				node = node.child;
+				path = path.subarray(i);
+			} else if (i === path.length) {
+				return { path: part.subarray(i), child: node.child };
+			} else {
+				return;
+			}
+		} else {
+			const part = node.path;
+			const i = common(path, part);
+			if (i === path.length) {
+				return { path: part.subarray(i), data: node.data };
+			} else {
+				return;
+			}
+		}
 	}
 }
 
@@ -251,7 +217,7 @@ export function deleteNode(node: MaybeNode, path: Uint8Array): MaybeNode {
 		path = Uint8Array.of(index, ...child.path);
 		return isExtension(child)
 			? { path, child: child.child } // double extension
-			: newLeaf(path, child.value);
+			: newLeaf(path, child.data);
 	} else if (isExtension(node)) {
 		const i = common(node.path, path);
 		if (!i) return node; // unchanged
@@ -262,21 +228,21 @@ export function deleteNode(node: MaybeNode, path: Uint8Array): MaybeNode {
 		path = concat(node.path, child.path);
 		return isExtension(child)
 			? { path, child: child.child } // double extension
-			: newLeaf(path, child.value);
+			: newLeaf(path, child.data);
 	} else {
 		if (common(node.path, path) === path.length) return; // delete
 		return node; // unchanged
 	}
 }
 
-export function newLeaf(path: Uint8Array, value: Uint8Array): LeafNode {
-	if (!value.length) {
-		value = EMPTY_BYTES;
+export function newLeaf(path: Uint8Array, data: Uint8Array): LeafNode {
+	if (!data.length) {
+		data = EMPTY_BYTES;
 		if (!path.length) return EMPTY_LEAF;
-	} else if (value[0] === 0) {
-		throw new Error(`not trim: ${toHex(value)}`);
+	} else if (data[0] === 0) {
+		throw new Error(`not trim: ${toHex(data)}`);
 	}
-	return { path, value };
+	return { path, data };
 }
 
 export function newBranch(): BranchNode {
@@ -299,7 +265,7 @@ export function encodeNode(node: MaybeNode): Uint8Array {
 	} else {
 		return encodeRlpList([
 			encodeRlpBytes(encodePath(node.path, true)),
-			encodeRlpBytes(encodeRlpBytes(node.value)),
+			encodeRlpBytes(encodeRlpBytes(node.data)),
 		]);
 	}
 }
@@ -312,6 +278,15 @@ function encodeNodeRef(node: MaybeNode) {
 	} else {
 		const v = encodeNode(node);
 		return encodeRlpBytes(v.length < 32 ? v : keccak256(v));
+	}
+}
+
+export function clearCache(node: MaybeNode) {
+	if (isBranch(node)) {
+		node.cache = undefined;
+		node.children.forEach(clearCache);
+	} else if (isExtension(node)) {
+		clearCache(node.child);
 	}
 }
 

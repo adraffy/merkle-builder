@@ -3,7 +3,7 @@ import { randomBytes, randomInt } from "crypto";
 import { insertLeaf, toNibblePath, type MaybeNode } from "../src/trie.js";
 import { keccak256, toHex, trimLeadingZeros } from "../src/utils.js";
 
-export function dump(node: MaybeNode) {
+export function dump(node: unknown) {
 	console.log(inspect(node, { depth: Infinity, colors: true }));
 }
 

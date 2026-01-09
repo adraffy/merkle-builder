@@ -127,7 +127,7 @@ export class Coder {
 			case TY_LEAF:
 				return {
 					path: this.readPath(),
-					value: this.readSizedBytes(),
+					data: this.readSizedBytes(),
 				};
 			default:
 				throw new Error(`unknown type: ${ty}`);
@@ -157,7 +157,7 @@ export class Coder {
 		} else {
 			this.writeByte(TY_LEAF);
 			this.writePath(node.path);
-			this.writeSizedBytes(node.value);
+			this.writeSizedBytes(node.data);
 		}
 	}
 	get bytes() {

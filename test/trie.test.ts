@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
+	copyNode,
 	deleteNode,
-	extractNode,
 	findLeaf,
+	getRootHash,
 	insertLeaf,
-	insertNode,
 	isBranch,
 	isExtension,
 	isLeaf,
 	toNibblePath,
+	type LeafNode,
 } from "../src/trie.js";
 import { keccak256 } from "../src/utils.js";
 import { randomTrie } from "./utils.js";
-import { toJSON } from "../src/json.js";
 
 describe("trie", () => {
 	describe("findNode", () => {
@@ -25,11 +25,41 @@ describe("trie", () => {
 				const { node, storage } = randomTrie();
 				for (const [k, v] of storage) {
 					expect(
-						findLeaf(node, toNibblePath(keccak256(k)))?.value
+						findLeaf(node, toNibblePath(keccak256(k)))?.data
 					).toStrictEqual(v);
 				}
 			});
 		}
+	});
+
+	describe("copyNode", () => {
+		test("empty", () => {
+			expect(copyNode(undefined)).toBeUndefined();
+		});
+
+		for (let i = 0; i < 10; ++i) {
+			test(`#${i}`, () => {
+				const { node } = randomTrie();
+				const copy = copyNode(node);
+				expect(getRootHash(copy)).toStrictEqual(getRootHash(node));
+			});
+		}
+
+		test("copyPaths", () => {
+			const path = Uint8Array.of(0);
+			const node: LeafNode = { path, data: Uint8Array.of(1) };
+			const copy = copyNode(node, true);
+			expect(copy.path !== node.path);
+			expect(copy.path).toStrictEqual(node.path);
+		});
+
+		test("copyData", () => {
+			const data = Uint8Array.of(1);
+			const node: LeafNode = { path: Uint8Array.of(0), data };
+			const copy = copyNode(node, true);
+			expect(copy.data !== node.data);
+			expect(copy.data).toStrictEqual(node.data);
+		});
 	});
 
 	describe("deleteNode", () => {
@@ -113,32 +143,5 @@ describe("trie", () => {
 			expect(deleteNode(a, Uint8Array.of(0, 0))).toStrictEqual(b);
 			expect(isLeaf(b)).toBeTrue();
 		});
-	});
-
-
-	describe('extractNode', () => {
-
-
-		test("a", () => {
-			const { node, storage } = randomTrie(4);
-
-
-			const index = (storage.length * Math.random()) | 0;
-			const [,,path] = storage[index];
-			const part = extractNode(node, path);
-			const rest = deleteNode(node, path);
-
-			console.log(toJSON(node));
-
-			console.log(toJSON(part));
-			console.log(toJSON(rest));
-			console.log(toJSON(insertNode(rest, path, part)));
-
-
-			const node2 = insertNode(rest, path, part);
-			//expect(node2).toStrictEqual(node);
-		});
-
-
 	});
 });

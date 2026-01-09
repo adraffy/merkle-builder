@@ -5,7 +5,7 @@ import { concat, toHex } from "../src/utils.js";
 import { randomBytes } from "./utils.js";
 
 describe("mimc", async () => {
-	const F = await Foundry.launch();
+	const F = await Foundry.launch({ infoLog: false });
 	afterAll(F.shutdown);
 
 	const Mimc = await F.deploy({ file: "Mimc" });

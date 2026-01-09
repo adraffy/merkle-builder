@@ -118,7 +118,7 @@ describe("storage", async () => {
 	describe("bytes", () => {
 		for (let i = 0; i < FUZZ; ++i) {
 			const length = randomInt(50);
-			test(`bytes #${i} x ${length}`, async () => {
+			test(`#${i} x ${length}`, async () => {
 				const C = await F.deploy(`contract X {
 					struct S { bytes v; }
 					function set(bytes32[] calldata ks, bytes[] calldata vs) external {

@@ -24,7 +24,7 @@ export function insertBytes(
 	const path = toNibblePath(key);
 	let oldSize = 0;
 	if (mode !== "ignore") {
-		const prior = findLeaf(node, path)?.value;
+		const prior = findLeaf(node, path)?.data;
 		if (prior?.length && prior[prior.length - 1] & 1) {
 			// small bytes can be ignored since the header is replaced
 			oldSize = Number(toBigInt(prior) >> 1n);
@@ -69,7 +69,7 @@ export function insertBytes(
 	return node;
 }
 
-export function increment(v: Uint8Array, max = 255): boolean {
+function increment(v: Uint8Array, max = 255): boolean {
 	let i = v.length;
 	while (i && v[i - 1] === max) --i;
 	if (i) {

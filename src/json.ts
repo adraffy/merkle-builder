@@ -4,15 +4,18 @@ import {
 	isExtension,
 	newBranch,
 	newLeaf,
+	type BranchNode,
+	type ExtensionNode,
+	type LeafNode,
 	type MaybeNode,
 } from "./trie.js";
-import { toBytes } from "./utils.js";
-import { hex_from_bytes } from '@adraffy/keccak'; // skips "0x"
+import { concat, toBytes } from "./utils.js";
+import { hex_from_bytes } from "@adraffy/keccak"; // skips "0x"
 
 const MORE = {
-	 [Symbol.for('nodejs.util.inspect.custom')]() {
-		return '\x1b[37m...\x1b[0m';
-	}
+	[Symbol.for("nodejs.util.inspect.custom")]() {
+		return "\x1b[37m...\x1b[0m";
+	},
 };
 
 export function toJSON(node: MaybeNode, depth = Infinity): any {
@@ -21,19 +24,15 @@ export function toJSON(node: MaybeNode, depth = Infinity): any {
 	if (isBranch(node)) {
 		return Object.fromEntries(
 			node.children.flatMap((x, i) =>
-				x ? [[toNibbleChar(i), toJSON(x, depth - 1)]] : []
+				x ? [[toNibbleChar(i), x && toJSON(x, depth - 1)]] : []
 			)
 		);
 	} else if (isExtension(node)) {
-		return {
-			[nibbleStr(node.path)]: toJSON(node.child, depth - 1),
-		};
+		return [nibbleStr(node.path), toJSON(node.child, depth - 1)];
 	} else if (node.path.length) {
-		return {
-			[nibbleStr(node.path)]: hex_from_bytes(node.value),
-		};
+		return [nibbleStr(node.path), hex_from_bytes(node.data)];
 	} else {
-		return hex_from_bytes(node.value);
+		return hex_from_bytes(node.data);
 	}
 }
 
@@ -43,23 +42,22 @@ export function fromJSON(json: any): MaybeNode {
 			return newLeaf(EMPTY_BYTES, toBytes(json));
 		case "object": {
 			if (json === null) return;
-			if (json.constructor === Object) {
-				const m = Object.entries(json);
-				if (m.length === 1) {
-					const child = fromJSON(m[0][1]);
-					if (isBranch(child)) {
-						return {
-							path: Uint8Array.from(m[0][0], fromNibbleChar),
-							child,
-						};
-					}
-				} else if (m.length > 1) {
-					const b = newBranch();
-					for (const [k, x] of m) {
-						b.children[fromNibbleChar(k)] = fromJSON(x);
-					}
-					return b;
+			if (Array.isArray(json) && json.length === 2) {
+				const path = Uint8Array.from(json[0], fromNibbleChar);
+				const child = fromJSON(json[1]);
+				if (isBranch(child)) {
+					return { path, child };
+				} else if (isExtension(child)) {
+					return { path: concat(path, child.path), child: child.child };
+				} else if (child) {
+					return newLeaf(concat(path, child.path), child.data);
 				}
+			} else if (json.constructor === Object) {
+				const b = newBranch();
+				for (const [k, x] of Object.entries(json)) {
+					b.children[fromNibbleChar(k)] = fromJSON(x);
+				}
+				return b;
 			}
 		}
 	}

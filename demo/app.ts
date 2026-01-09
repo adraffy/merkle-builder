@@ -205,7 +205,7 @@ const fakeProvider: RawProvider = {
 					const leaf = findLeaf(node, path);
 					return {
 						key: toHex(slot),
-						value: leaf?.value.length ? toHex(leaf.value) : "0x0",
+						value: leaf?.data.length ? toHex(leaf.data) : "0x0",
 						proof: getProof(node, path).map((v) => toHex(v)),
 					};
 				});
@@ -223,7 +223,7 @@ const fakeProvider: RawProvider = {
 				const leaf = findLeaf(node, path);
 				console.timeEnd("getStorage");
 				const word = new Uint8Array(32);
-				if (leaf) word.set(leaf.value, 32 - leaf.value.length);
+				if (leaf) word.set(leaf.data, 32 - leaf.data.length);
 				return toHex(word);
 			}
 			default: {
