@@ -111,9 +111,7 @@ export function graftLimb(
 			break;
 		}
 	}
-	if (!isBranch(node)) {
-		throw new RangeError("invalid graft");
-	}
+	if (!isBranch(node)) throw new RangeError("invalid graft");
 	if (start === index) {
 		node.children[path[start]] = limb;
 	} else if (isBranch(limb)) {

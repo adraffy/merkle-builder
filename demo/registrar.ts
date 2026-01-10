@@ -92,7 +92,7 @@ export function determineChain(name = "op"): ChainInfo {
 				alchemySlug: "base-mainnet",
 				createdAtBlock: 31808582,
 			};
-		case "linea": {
+		case "linea":
 			return {
 				name: "linea",
 				id: 59144n,
@@ -102,7 +102,16 @@ export function determineChain(name = "op"): ChainInfo {
 				alchemySlug: "linea-main",
 				createdAtBlock: 20173340,
 			};
-		}
+		case "scroll":
+			return {
+				name: "scroll",
+				id: 534352n,
+				explorer: "https://scrollscan.com",
+				publicRPC: "https://rpc.scroll.io",
+				drpcSlug: "scroll",
+				alchemySlug: "scroll-mainnet",
+				createdAtBlock: 16604272,
+			};
 		default:
 			throw new Error(`unsupported chain: ${name}`);
 	}

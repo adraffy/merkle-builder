@@ -69,7 +69,7 @@ export function insertBytes(
 	return node;
 }
 
-function increment(v: Uint8Array, max = 255): boolean {
+function increment(v: Uint8Array, max = 255) {
 	let i = v.length;
 	while (i && v[i - 1] === max) --i;
 	if (i) {
@@ -78,7 +78,6 @@ function increment(v: Uint8Array, max = 255): boolean {
 	} else {
 		v.fill(0);
 	}
-	return !!i;
 }
 
 function bytes32(v: Uint8Array) {
