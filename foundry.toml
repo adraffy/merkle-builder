@@ -1,0 +1,17 @@
+# https://book.getfoundry.sh/reference/config/overview
+
+[profile.default]
+
+libs = ["lib"]
+
+optimizer = true
+optimizer_runs = 1
+
+remappings = [
+	"@ens/=lib/ens-contracts/contracts/",
+	"@openzeppelin/contracts-v5=lib/openzeppelin-contracts/contracts/",
+]
+
+# forge i foundry-rs/forge-std
+# forge i ensdomains/ens-contracts
+# forge i OpenZeppelin/openzeppelin-contracts@release-v5.3

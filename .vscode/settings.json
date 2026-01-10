@@ -1,0 +1,10 @@
+{
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    "**/dist/**",
+    "**/src/index.ts"
+  ],
+  "javascript.preferences.autoImportFileExcludePatterns": [
+    "**/dist/**",
+    "**/src/index.ts"
+  ]
+}
