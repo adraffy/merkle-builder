@@ -37,7 +37,6 @@ const REGISTRAR_ABI = new Interface([
 ]);
 
 const args = parseArgs({
-	args: process.argv.slice(2),
 	options: {
 		chain: { type: "string", short: "c" },
 	},

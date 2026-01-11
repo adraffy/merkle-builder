@@ -1,5 +1,11 @@
 import { insertLeaf, toNibblePath, type MaybeNode } from "../src/trie.js";
-import { followSlot, keccak256, toBytes, type Hex } from "../src/utils.js";
+import {
+	followSlot,
+	keccak256,
+	toBytes,
+	trimLeadingZeros,
+	type Hex,
+} from "../src/utils.js";
 
 // https://docs.ens.domains/ensip/19/#annex-supported-chains
 export function getRegistrarAddress(testnet?: boolean) {
@@ -17,7 +23,7 @@ const SLOT_OWNER = 1n;
 const OWNER_PATH = toNibblePath(keccak256(toBytes(SLOT_OWNER, 32)));
 
 export function setOwner(node: MaybeNode, owner: Hex): MaybeNode {
-	return insertLeaf(node, OWNER_PATH, toBytes(owner));
+	return insertLeaf(node, OWNER_PATH, trimLeadingZeros(toBytes(owner)));
 }
 
 export function getPrimarySlot(addr: Hex) {
@@ -50,7 +56,7 @@ export function determineProvider(info: ChainInfo, proto = "https") {
 	if (info.drpcSlug && (key = process.env.DRPC_KEY)) {
 		return `${proto}://lb.drpc.live/${info.drpcSlug}/${key}`;
 	} else if (info.alchemySlug && (key = process.env.ALCHEMY_KEY)) {
-		return `${proto}://${info.alchemySlug}.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`;
+		return `${proto}://${info.alchemySlug}.g.alchemy.com/v2/${key}`;
 	} else {
 		throw new Error(`missing .env`);
 	}
@@ -58,7 +64,6 @@ export function determineProvider(info: ChainInfo, proto = "https") {
 
 export function determineChain(name = "op"): ChainInfo {
 	switch (name.toLowerCase()) {
-		case undefined: // default
 		case "arb": {
 			return {
 				name: "arbitrum",
@@ -99,7 +104,7 @@ export function determineChain(name = "op"): ChainInfo {
 				explorer: "https://lineascan.build",
 				publicRPC: "https://rpc.linea.build",
 				drpcSlug: "linea",
-				alchemySlug: "linea-main",
+				alchemySlug: "linea-mainnet",
 				createdAtBlock: 20173340,
 			};
 		case "scroll":

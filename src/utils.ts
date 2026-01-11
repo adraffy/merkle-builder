@@ -17,7 +17,7 @@ export function concat(...args: Uint8Array[]): Uint8Array {
 	return v;
 }
 
-export function followSlot(slot: bigint, key: Uint8Array) {
+export function followSlot(slot: bigint, key: Uint8Array): Uint8Array {
 	// https://docs.soliditylang.org/en/latest/internals/layout_in_storage.html#mappings-and-dynamic-arrays
 	return keccak256(concat(key, toBytes(slot, 32)));
 }

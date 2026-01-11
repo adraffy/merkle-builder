@@ -1,5 +1,5 @@
 import { inspect } from "bun";
-import { randomBytes, randomInt } from "crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { insertLeaf, toNibblePath, type MaybeNode } from "../src/trie.js";
 import { keccak256, toHex, trimLeadingZeros } from "../src/utils.js";
 

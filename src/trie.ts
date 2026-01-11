@@ -235,7 +235,7 @@ export function newLeaf(path: Uint8Array, data: Uint8Array): LeafNode {
 	if (!data.length) {
 		data = EMPTY_BYTES;
 		if (!path.length) return EMPTY_LEAF;
-	} else if (data[0] === 0) {
+	} else if (!data[0]) {
 		throw new Error(`not trim: ${toHex(data)}`);
 	}
 	return { path, data };
@@ -292,7 +292,7 @@ export function getRootHash(node: MaybeNode): Uint8Array {
 	return v.length < 32 ? v : keccak256(v);
 }
 
-export function toNibblePath(v: Uint8Array) {
+export function toNibblePath(v: Uint8Array): Uint8Array {
 	if (!v.length) return EMPTY_BYTES;
 	const u = new Uint8Array(v.length << 1);
 	let i = 0;
@@ -308,7 +308,7 @@ function encodePath(path: Uint8Array, leaf: boolean): Uint8Array {
 	if (leaf) v[0] = 32;
 	const odd = path.length & 1;
 	if (path.length & 1) v[0] |= 16 | path[0];
-	for (let i = odd, j = 1; i < path.length; i += 2, j++) {
+	for (let i = odd, j = 1; i < path.length; i += 2, ++j) {
 		v[j] = (path[i] << 4) | path[i + 1];
 	}
 	return v;
@@ -320,7 +320,7 @@ function encodeRlpLength(start: number, length: number): Uint8Array {
 	const v = new Uint8Array(8);
 	let i = v.length;
 	for (; length; length >>= 8, ++start) {
-		v[--i] = length & 255;
+		v[--i] = length;
 	}
 	v[--i] = start + max;
 	return v.subarray(i);
@@ -338,6 +338,6 @@ function encodeRlpList(m: Uint8Array[]): Uint8Array {
 
 function encodeRlpBytes(v: Uint8Array): Uint8Array {
 	const max = 0x80;
-	if (v.length == 1 && v[0] < max) return v;
+	if (v.length === 1 && v[0] < max) return v;
 	return concat(encodeRlpLength(max, v.length), v);
 }

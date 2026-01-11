@@ -17,7 +17,6 @@ import { getByteCount, getNodeCount } from "../src/inspect.js";
 import { graftLimb, pluckLimbs } from "../src/surgery.js";
 
 const args = parseArgs({
-	args: process.argv.slice(2),
 	options: {
 		chain: { type: "string", short: "c" },
 		depth: { type: "string", short: "d", default: "2" },
